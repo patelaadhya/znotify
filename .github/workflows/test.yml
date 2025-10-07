@@ -1,0 +1,91 @@
+name: Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-linux:
+    name: Test on Linux
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build
+        run: zig build
+
+      - name: Run tests
+        run: zig build test --summary all
+
+      - name: Run benchmarks
+        run: zig build bench
+
+  test-linux-docker:
+    name: Test on Linux (Docker with D-Bus)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: ./scripts/build-docker.sh --cache
+
+      - name: Run tests in Docker
+        run: ./scripts/test-linux.sh test
+
+      - name: Run benchmarks in Docker
+        run: ./scripts/test-linux.sh bench
+
+  test-windows:
+    name: Test on Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build
+        run: zig build
+
+      - name: Run tests
+        run: zig build test --summary all
+
+      - name: Run benchmarks
+        run: zig build bench
+
+  test-macos:
+    name: Test on macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.1
+
+      - name: Build
+        run: zig build
+
+      - name: Run tests
+        run: zig build test --summary all
+
+      - name: Run benchmarks
+        run: zig build bench

@@ -155,6 +155,58 @@ src/
 - Critical metrics: startup <10ms, notification display <50ms, memory <5MB
 - Run with: `zig build bench`
 
+## Docker Testing Environment
+
+### Overview
+Docker-based Linux testing environment with D-Bus support, enabling cross-platform testing from any development machine (Windows, macOS, or Linux).
+
+### Building Docker Images
+```bash
+# Linux/macOS
+./scripts/build-docker.sh          # Build without cache (clean build)
+./scripts/build-docker.sh --cache  # Build with cache (faster)
+
+# Windows (PowerShell)
+.\scripts\build-docker.ps1          # Build without cache (clean build)
+.\scripts\build-docker.ps1 --cache  # Build with cache (faster)
+```
+
+### Running Tests in Docker
+```bash
+# Linux/macOS
+./scripts/test-linux.sh test   # Run all tests
+./scripts/test-linux.sh bench  # Run benchmarks
+./scripts/test-linux.sh build  # Build project
+./scripts/test-linux.sh shell  # Interactive shell for debugging
+./scripts/test-linux.sh clean  # Clean up Docker resources
+
+# Windows (PowerShell)
+.\scripts\test-linux.ps1 test   # Run all tests
+.\scripts\test-linux.ps1 bench  # Run benchmarks
+.\scripts\test-linux.ps1 build  # Build project
+.\scripts\test-linux.ps1 shell  # Interactive shell for debugging
+.\scripts\test-linux.ps1 clean  # Clean up Docker resources
+```
+
+### Docker Environment Details
+- **Base**: Ubuntu 22.04
+- **Zig**: 0.15.1 (matches development environment)
+- **D-Bus**: Session bus daemon with auto-start
+- **Notification Daemon**: Dunst (lightweight notification daemon)
+- **Display**: Xvfb (headless X11 server on :99)
+- **Volumes**: Source code mounted at `/workspace`
+
+### CI/CD Integration
+GitHub Actions workflow (`.github/workflows/test.yml`) runs:
+- Native tests on Linux, Windows, and macOS
+- Docker-based tests with D-Bus integration on Linux
+- Benchmarks on all platforms
+
+### Docker Compose Services
+- `linux-test`: Interactive development environment
+- `test`: One-shot test execution
+- `bench`: One-shot benchmark execution
+
 ## Platform-Specific Implementation Notes
 
 ### Windows

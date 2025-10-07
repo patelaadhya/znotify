@@ -1,0 +1,38 @@
+services:
+  linux-test:
+    build:
+      context: ..
+      dockerfile: docker/linux-dbus.Dockerfile
+      args:
+        ZIG_VERSION: "0.15.1"
+    image: znotify-linux-test:latest
+    container_name: znotify-linux-test
+    volumes:
+      # Mount source code for live updates
+      - ..:/workspace:cached
+      # Use named volume for zig cache to avoid Windows filesystem issues
+      - zig-cache:/tmp/zig-cache
+    environment:
+      - DBUS_SESSION_BUS_ADDRESS=unix:path=/var/run/dbus/session_bus_socket
+      - DISPLAY=:99
+      # Point Zig cache to container-local directory
+      - ZIG_GLOBAL_CACHE_DIR=/tmp/zig-cache
+      - ZIG_LOCAL_CACHE_DIR=/tmp/zig-cache
+    # Keep container running for interactive testing
+    stdin_open: true
+    tty: true
+    # Override default command for interactive mode
+    command: /bin/bash
+
+  # Service for running tests in one shot
+  test:
+    extends: linux-test
+    command: zig build test --summary all --cache-dir /tmp/zig-cache
+
+  # Service for running benchmarks
+  bench:
+    extends: linux-test
+    command: zig build bench --cache-dir /tmp/zig-cache
+
+volumes:
+  zig-cache:

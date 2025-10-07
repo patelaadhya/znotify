@@ -1,0 +1,36 @@
+# Build artifacts
+zig-cache/
+zig-out/
+.zig-cache/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Docker files (don't need these inside container)
+docker/docker-compose.yml
+docker/*.Dockerfile
+.dockerignore
+
+# CI/CD
+.github/
+
+# Documentation (not needed for build)
+docs/
+*.md
+
+# Test outputs
+*.log
+*.tmp
+
+# OS-specific
+Thumbs.db
+desktop.ini
