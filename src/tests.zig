@@ -170,3 +170,30 @@ test "Shell escaping" {
 
     try testing.expectEqualStrings("'test; rm -rf /'", escaped);
 }
+
+const backend = @import("platform/backend.zig");
+
+test "Platform detection" {
+    const platform = backend.Platform.detect();
+    try testing.expect(platform != .unknown);
+}
+
+test "Terminal backend" {
+    const allocator = testing.allocator;
+
+    var term_backend = try backend.createTerminalBackend(allocator);
+    defer term_backend.deinit();
+
+    var notif = try notification.Notification.init(allocator, "Test", "Message");
+    defer notif.deinit();
+
+    const id = try term_backend.send(notif);
+    try testing.expect(id > 0);
+
+    try term_backend.close(id);
+    try testing.expect(term_backend.isAvailable());
+
+    const caps = try term_backend.getCapabilities(allocator);
+    defer allocator.free(caps);
+    try testing.expectEqualStrings("terminal", caps);
+}
