@@ -1,20 +1,21 @@
 const std = @import("std");
 const notification = @import("notification.zig");
+const errors = @import("errors.zig");
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    // Test error reporting
+    var reporter = errors.ErrorReporter.init(true);
 
-    var notif = try notification.Notification.init(allocator, "Test", "Message");
-    defer notif.deinit();
+    // Simulate an error
+    const err = errors.ZNotifyError.InvalidIconPath;
+    const context = errors.ErrorContext{
+        .error_type = err,
+        .message = "Icon not found",
+        .details = "/invalid/path/icon.png",
+    };
 
-    std.debug.print("Notification created: {s}\n", .{notif.title});
+    reporter.reportError(err, context);
+    reporter.reportWarning("This is a test warning");
 
-    // Test builder
-    var builder = try notification.NotificationBuilder.init(allocator, "Builder", "Test");
-    var built = builder.urgency(.critical).timeout(10000).build();
-    defer built.deinit();
-
-    std.debug.print("Builder notification urgency: {s}\n", .{built.urgency.toString()});
+    std.debug.print("Exit code for error: {}\n", .{errors.getExitCode(err)});
 }
