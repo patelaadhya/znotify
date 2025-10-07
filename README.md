@@ -27,18 +27,20 @@ Currently implemented:
   - Start Menu shortcut creation with AppUserModelID
   - Urgency level mapping (audio and scenario)
   - Action Center integration
-- **Linux notifications** (D-Bus implementation - Phase 1 complete)
+- **Linux notifications** (D-Bus implementation)
   - D-Bus binary protocol implementation (zero dependencies)
   - Basic notifications with title and message
   - Urgency levels (low/normal/critical) with visual distinction
   - Timeout handling (persistent, timed, or default)
+  - Icon support (theme names and file paths via -i option)
+  - Notification updates via replaces_id (-r option)
+  - Capability detection (GetCapabilities with helper functions)
   - Compatible with all notification daemons (Dunst, Mako, notify-osd, GNOME, KDE, XFCE)
 
 Coming soon:
-- Linux Phase 2: Icons, action buttons, capabilities detection
+- Action buttons with signal handlers (Linux)
+- Sound hints (Linux)
 - macOS notifications (UserNotifications framework)
-- Custom icon support (all platforms)
-- Action buttons (all platforms)
 - Configuration file support
 - Shell_NotifyIcon fallback (Windows 8.1)
 

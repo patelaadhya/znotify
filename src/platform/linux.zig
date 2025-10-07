@@ -890,6 +890,29 @@ pub const LinuxBackend = struct {
         return caps_list;
     }
 
+    /// Check if a specific capability is supported by the notification daemon.
+    /// Queries the daemon and checks if the capability name appears in the list.
+    pub fn hasCapability(self: *LinuxBackend, allocator: std.mem.Allocator, capability: []const u8) !bool {
+        const caps = try self.getCapabilities(allocator);
+        defer allocator.free(caps);
+        return std.mem.indexOf(u8, caps, capability) != null;
+    }
+
+    /// Check if action buttons are supported.
+    pub fn supportsActions(self: *LinuxBackend, allocator: std.mem.Allocator) !bool {
+        return self.hasCapability(allocator, "actions");
+    }
+
+    /// Check if static icons are supported.
+    pub fn supportsIcons(self: *LinuxBackend, allocator: std.mem.Allocator) !bool {
+        return self.hasCapability(allocator, "icon-static");
+    }
+
+    /// Check if body markup (HTML) is supported.
+    pub fn supportsBodyMarkup(self: *LinuxBackend, allocator: std.mem.Allocator) !bool {
+        return self.hasCapability(allocator, "body-markup");
+    }
+
     /// Check if D-Bus connection was successfully established.
     pub fn isAvailable(self: *LinuxBackend) bool {
         return self.available;

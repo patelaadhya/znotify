@@ -42,6 +42,16 @@ pub fn main() !void {
         if (config.urgency) |u| notif.urgency = u;
         if (config.timeout_ms) |t| notif.timeout_ms = t;
         if (config.app_name) |a| notif.app_name = a;
+        if (config.replace_id) |r| notif.replace_id = r;
+        if (config.icon) |i| {
+            // Try to parse as builtin icon first, otherwise treat as file path
+            if (notification.BuiltinIcon.fromString(i)) |builtin| {
+                notif.icon = .{ .builtin = builtin };
+            } else |_| {
+                const icon_path = try allocator.dupe(u8, i);
+                notif.icon = .{ .file_path = icon_path };
+            }
+        }
 
         const id = try term.send(notif);
         std.debug.print("Notification sent with ID: {}\n", .{id});
@@ -56,6 +66,16 @@ pub fn main() !void {
     if (config.urgency) |u| notif.urgency = u;
     if (config.timeout_ms) |t| notif.timeout_ms = t;
     if (config.app_name) |a| notif.app_name = a;
+    if (config.replace_id) |r| notif.replace_id = r;
+    if (config.icon) |i| {
+        // Try to parse as builtin icon first, otherwise treat as file path
+        if (notification.BuiltinIcon.fromString(i)) |builtin| {
+            notif.icon = .{ .builtin = builtin };
+        } else |_| {
+            const icon_path = try allocator.dupe(u8, i);
+            notif.icon = .{ .file_path = icon_path };
+        }
+    }
 
     const id = try platform_backend.send(notif);
     std.debug.print("Notification sent with ID: {}\n", .{id});
