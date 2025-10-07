@@ -12,6 +12,9 @@ services:
       - ..:/workspace:cached
       # Use named volume for zig cache to avoid Windows filesystem issues
       - zig-cache:/tmp/zig-cache
+      # Prevent Windows cache directories from being mounted
+      - /workspace/.zig-cache
+      - /workspace/zig-out
     environment:
       - DBUS_SESSION_BUS_ADDRESS=unix:path=/var/run/dbus/session_bus_socket
       - DISPLAY=:99

@@ -21,13 +21,20 @@ Currently implemented:
 - Error handling with user-friendly messages
 - Performance benchmarks
 - Docker-based testing infrastructure
+- Platform abstraction layer
+- Windows notifications (WinRT Toast API with COM integration)
+  - Toast notifications with title and message
+  - Start Menu shortcut creation with AppUserModelID
+  - Urgency level mapping (audio and scenario)
+  - Action Center integration
 
 Coming soon:
-- Platform abstraction layer
-- Windows notifications (WinRT Toast API)
-- Linux notifications (D-Bus)
+- Linux notifications (D-Bus implementation)
 - macOS notifications (UserNotifications framework)
+- Custom icon support (all platforms)
+- Action buttons (all platforms)
 - Configuration file support
+- Shell_NotifyIcon fallback (Windows 8.1)
 
 ## Building
 

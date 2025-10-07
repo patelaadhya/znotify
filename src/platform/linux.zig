@@ -1,8 +1,553 @@
 const std = @import("std");
-const Backend = @import("backend.zig").Backend;
+const notification = @import("../notification.zig");
+const errors = @import("../errors.zig");
+const backend = @import("backend.zig");
+const validation = @import("../utils/validation.zig");
+const net = std.net;
+const fs = std.fs;
 
-/// Create Linux backend (stub for now)
-pub fn createBackend(allocator: std.mem.Allocator) !Backend {
-    _ = allocator;
-    return error.NotImplemented;
+/// Linux notification backend using D-Bus protocol.
+///
+/// Communicates with desktop notification daemons via the
+/// org.freedesktop.Notifications D-Bus interface. Compatible with:
+/// - GNOME (gnome-shell notification daemon)
+/// - KDE Plasma (plasma-workspace)
+/// - Dunst
+/// - Mako
+/// - notify-osd
+/// - XFCE4-notifyd
+///
+/// Implementation:
+/// - Connects to D-Bus session bus via UNIX domain socket
+/// - Authenticates using EXTERNAL mechanism (UID-based)
+/// - Sends notifications via D-Bus binary protocol
+/// - Parses METHOD_RETURN messages to get notification IDs
+pub const LinuxBackend = struct {
+    allocator: std.mem.Allocator,
+    /// Active D-Bus connection, null if connection failed
+    connection: ?net.Stream = null,
+    /// Auto-incrementing notification ID counter
+    next_id: u32 = 1,
+    /// Whether D-Bus connection was successfully established
+    available: bool = false,
+    /// D-Bus message serial number counter
+    serial: u32 = 1,
+
+    /// Initialize Linux backend and connect to D-Bus session bus.
+    /// Connection failure is non-fatal; backend will report as unavailable.
+    pub fn init(allocator: std.mem.Allocator) !*LinuxBackend {
+        const self = try allocator.create(LinuxBackend);
+        self.* = LinuxBackend{
+            .allocator = allocator,
+            .serial = 1,
+        };
+
+        // Connect to D-Bus session bus
+        self.connectDBus() catch |err| {
+            std.debug.print("Failed to connect to D-Bus: {}\n", .{err});
+            self.available = false;
+            return self;
+        };
+
+        self.available = true;
+        return self;
+    }
+
+    /// Clean up D-Bus connection and free resources.
+    pub fn deinit(self: *LinuxBackend) void {
+        if (self.connection) |conn| {
+            conn.close();
+        }
+        self.allocator.destroy(self);
+    }
+
+    /// Connect to D-Bus session bus via UNIX domain socket.
+    /// Parses DBUS_SESSION_BUS_ADDRESS environment variable to find socket path.
+    /// Supports both path= (filesystem socket) and abstract= (Linux abstract socket) formats.
+    fn connectDBus(self: *LinuxBackend) !void {
+        // Get D-Bus session bus address
+        const session_addr = try std.process.getEnvVarOwned(
+            self.allocator,
+            "DBUS_SESSION_BUS_ADDRESS",
+        );
+        defer self.allocator.free(session_addr);
+
+        // Parse unix:path= or unix:abstract= format
+        if (std.mem.startsWith(u8, session_addr, "unix:")) {
+            var iter = std.mem.splitScalar(u8, session_addr[5..], ',');
+            while (iter.next()) |param| {
+                if (std.mem.startsWith(u8, param, "path=")) {
+                    const socket_path = param[5..];
+
+                    // Connect to UNIX domain socket
+                    const sockfd = try std.posix.socket(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0);
+                    var sockfd_owned = true;
+                    errdefer if (sockfd_owned) std.posix.close(sockfd);
+
+                    const addr = try net.Address.initUnix(socket_path);
+                    try std.posix.connect(sockfd, &addr.any, addr.getOsSockLen());
+
+                    self.connection = net.Stream{ .handle = sockfd };
+                    sockfd_owned = false; // self.connection now owns the socket
+
+                    // Authenticate with D-Bus
+                    self.authenticateDBus() catch |err| {
+                        if (self.connection) |conn| {
+                            conn.close();
+                        }
+                        self.connection = null;
+                        return err;
+                    };
+                    return;
+                }
+                if (std.mem.startsWith(u8, param, "abstract=")) {
+                    // Abstract socket (Linux-specific)
+                    const socket_name = param[9..];
+                    var buf: [108]u8 = undefined;
+                    buf[0] = 0; // Abstract socket marker
+                    @memcpy(buf[1..socket_name.len + 1], socket_name);
+
+                    // For abstract sockets, we need to create the socket manually
+                    const sockfd = try std.posix.socket(std.posix.AF.UNIX, std.posix.SOCK.STREAM, 0);
+                    var sockfd_owned = true;
+                    errdefer if (sockfd_owned) std.posix.close(sockfd);
+
+                    const addr = try net.Address.initUnix(buf[0..socket_name.len + 1]);
+                    try std.posix.connect(sockfd, &addr.any, addr.getOsSockLen());
+
+                    self.connection = net.Stream{ .handle = sockfd };
+                    sockfd_owned = false; // self.connection now owns the socket
+
+                    // Authenticate with D-Bus
+                    self.authenticateDBus() catch |err| {
+                        if (self.connection) |conn| {
+                            conn.close();
+                        }
+                        self.connection = null;
+                        return err;
+                    };
+                    return;
+                }
+            }
+        }
+
+        return error.InvalidDBusAddress;
+    }
+
+    /// Authenticate with D-Bus daemon using EXTERNAL mechanism.
+    ///
+    /// D-Bus authentication protocol:
+    /// 1. Send NULL byte (protocol version indicator)
+    /// 2. Send "AUTH EXTERNAL <hex-encoded-uid>\r\n"
+    /// 3. Wait for "OK <server-guid>\r\n" response
+    /// 4. Send "BEGIN\r\n" to start message exchange
+    ///
+    /// EXTERNAL mechanism uses UNIX credentials (UID) for authentication.
+    fn authenticateDBus(self: *LinuxBackend) !void {
+        const conn = self.connection orelse return error.NoConnection;
+
+        // Send NULL byte to indicate protocol version
+        _ = try conn.write(&[_]u8{0});
+
+        // D-Bus AUTH protocol using EXTERNAL mechanism (UID-based)
+        const uid = std.posix.getuid();
+        var uid_hex: [32]u8 = undefined;
+        const uid_str = try std.fmt.bufPrint(&uid_hex, "{d}", .{uid});
+
+        // Convert UID string to hex (each char to 2 hex digits)
+        var hex_buf: [64]u8 = undefined;
+        var hex_len: usize = 0;
+        for (uid_str) |c| {
+            const hex_chars = try std.fmt.bufPrint(hex_buf[hex_len..], "{X:0>2}", .{c});
+            hex_len += hex_chars.len;
+        }
+        const hex_uid = hex_buf[0..hex_len];
+
+        // Send AUTH EXTERNAL <hex-uid>
+        var auth_msg: [256]u8 = undefined;
+        const auth = try std.fmt.bufPrint(&auth_msg, "AUTH EXTERNAL {s}\r\n", .{hex_uid});
+        _ = try conn.write(auth);
+
+        // Read response (should be "OK <server-guid>")
+        var response: [512]u8 = undefined;
+        const n = try conn.read(&response);
+        if (n == 0 or !std.mem.startsWith(u8, response[0..n], "OK ")) {
+            return error.AuthFailed;
+        }
+
+        // Send BEGIN
+        _ = try conn.write("BEGIN\r\n");
+    }
+
+    /// Send notification via D-Bus to org.freedesktop.Notifications.Notify.
+    /// Returns notification ID assigned by the notification daemon.
+    pub fn send(self: *LinuxBackend, notif: notification.Notification) !u32 {
+        if (!self.available or self.connection == null) {
+            return errors.ZNotifyError.NotificationFailed;
+        }
+
+        // Send D-Bus method call to org.freedesktop.Notifications.Notify
+        const msg_serial = self.serial;
+        self.serial += 1;
+
+        try self.sendNotifyMethodCall(notif, msg_serial);
+
+        // Read response
+        const notif_id = try self.readNotifyReply();
+        return notif_id;
+    }
+
+    /// Marshal and send D-Bus METHOD_CALL message for Notify().
+    ///
+    /// D-Bus binary protocol message structure:
+    /// - Header: endianness, type, flags, version, body_length, serial
+    /// - Header fields: PATH, INTERFACE, MEMBER, DESTINATION, SIGNATURE
+    /// - 8-byte alignment padding
+    /// - Body: app_name, replaces_id, icon, title, message, actions, hints, timeout
+    ///
+    /// Notify method signature: susssasa{sv}i
+    /// - s: app_name (string)
+    /// - u: replaces_id (uint32)
+    /// - s: app_icon (string)
+    /// - s: summary/title (string)
+    /// - s: body/message (string)
+    /// - as: actions (array of strings)
+    /// - a{sv}: hints (dict of string to variant)
+    /// - i: expire_timeout (int32)
+    fn sendNotifyMethodCall(self: *LinuxBackend, notif: notification.Notification, serial: u32) !void {
+        const conn = self.connection orelse return error.NoConnection;
+
+        // Build D-Bus message using binary protocol
+
+        var msg: std.ArrayList(u8) = .{};
+        try msg.ensureTotalCapacity(self.allocator, 1024);
+        defer msg.deinit(self.allocator);
+
+        // Endianness ('l' for little-endian)
+        try msg.append(self.allocator, 'l');
+
+        // Message type (1 = METHOD_CALL)
+        try msg.append(self.allocator, 1);
+
+        // Flags (0 = no flags)
+        try msg.append(self.allocator, 0);
+
+        // Protocol version (1)
+        try msg.append(self.allocator, 1);
+
+        // Reserve space for body length (4 bytes) - will fill later
+        const body_len_pos = msg.items.len;
+        try msg.appendSlice(self.allocator, &[_]u8{0, 0, 0, 0});
+
+        // Serial number
+        try msg.writer(self.allocator).writeInt(u32, serial, .little);
+
+        // Build header fields array first to calculate length
+        var header_fields: std.ArrayList(u8) = .{};
+        try header_fields.ensureTotalCapacity(self.allocator, 512);
+        defer header_fields.deinit(self.allocator);
+
+        // Field 1: PATH (object path)
+        try header_fields.append(self.allocator, 1); // OBJECT_PATH
+        try appendSignature(&header_fields, self.allocator, "o");
+        try appendObjectPath(&header_fields, self.allocator, "/org/freedesktop/Notifications");
+
+        // Field 2: INTERFACE
+        try header_fields.append(self.allocator, 2); // INTERFACE
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.Notifications");
+
+        // Field 3: MEMBER (method name)
+        try header_fields.append(self.allocator, 3); // MEMBER
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "Notify");
+
+        // Field 6: DESTINATION
+        try header_fields.append(self.allocator, 6); // DESTINATION
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.Notifications");
+
+        // Field 8: SIGNATURE
+        try header_fields.append(self.allocator, 8); // SIGNATURE
+        try appendSignature(&header_fields, self.allocator, "g");
+        try appendSignature(&header_fields, self.allocator, "susssasa{sv}i");
+
+        // Write header fields array length
+        try msg.writer(self.allocator).writeInt(u32, @intCast(header_fields.items.len), .little);
+        try msg.appendSlice(self.allocator, header_fields.items);
+
+        // Pad to 8-byte alignment for body
+        while (msg.items.len % 8 != 0) {
+            try msg.append(self.allocator, 0);
+        }
+
+        const body_start = msg.items.len;
+
+        // Build message body: Notify(susssasa{sv}i)
+        // s: app_name
+        try appendString(&msg, self.allocator, notif.app_name);
+
+        // u: replaces_id
+        try msg.writer(self.allocator).writeInt(u32, notif.replace_id orelse 0, .little);
+
+        // s: app_icon
+        const icon_str = switch (notif.icon) {
+            .none => "",
+            .builtin => |b| @tagName(b),
+            .file_path => |p| p,
+            .url => |u| u,
+        };
+        try appendString(&msg, self.allocator, icon_str);
+
+        // s: summary (title)
+        try appendString(&msg, self.allocator, notif.title);
+
+        // s: body (message)
+        try appendString(&msg, self.allocator, notif.message);
+
+        // as: actions (empty array)
+        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+
+        // a{sv}: hints
+        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+
+        // i: expire_timeout
+        const timeout: i32 = if (notif.timeout_ms) |t| @intCast(t) else -1;
+        try msg.writer(self.allocator).writeInt(i32, timeout, .little);
+
+        // Fill in body length
+        const body_len: u32 = @intCast(msg.items.len - body_start);
+        std.mem.writeInt(u32, msg.items[body_len_pos..][0..4], body_len, .little);
+
+        // Send the message
+        _ = try conn.write(msg.items);
+    }
+
+    /// Marshal and send D-Bus METHOD_CALL message for CloseNotification().
+    ///
+    /// CloseNotification method signature: u
+    /// - u: notification_id (uint32)
+    ///
+    /// Does not wait for a reply since we don't need confirmation.
+    fn sendCloseNotificationMethodCall(self: *LinuxBackend, id: u32, serial: u32) !void {
+        const conn = self.connection orelse return error.NoConnection;
+
+        var msg: std.ArrayList(u8) = .{};
+        try msg.ensureTotalCapacity(self.allocator, 512);
+        defer msg.deinit(self.allocator);
+
+        // Endianness ('l' for little-endian)
+        try msg.append(self.allocator, 'l');
+
+        // Message type (1 = METHOD_CALL)
+        try msg.append(self.allocator, 1);
+
+        // Flags (0 = none, or 1 = no reply expected)
+        try msg.append(self.allocator, 1); // NO_REPLY_EXPECTED
+
+        // Protocol version (1)
+        try msg.append(self.allocator, 1);
+
+        // Body length (placeholder, will be filled later)
+        const body_len_pos = msg.items.len;
+        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+
+        // Serial number
+        try msg.writer(self.allocator).writeInt(u32, serial, .little);
+
+        // Header fields array length (placeholder)
+        const header_fields_start = msg.items.len;
+        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+
+        // Header field 1: PATH
+        try msg.append(self.allocator, 1); // HEADER_FIELD_PATH
+        try appendSignature(&msg, self.allocator, "o");
+        try appendObjectPath(&msg, self.allocator, "/org/freedesktop/Notifications");
+
+        // Header field 2: INTERFACE
+        try msg.append(self.allocator, 2); // HEADER_FIELD_INTERFACE
+        try appendSignature(&msg, self.allocator, "s");
+        try appendString(&msg, self.allocator, "org.freedesktop.Notifications");
+
+        // Header field 3: MEMBER
+        try msg.append(self.allocator, 3); // HEADER_FIELD_MEMBER
+        try appendSignature(&msg, self.allocator, "s");
+        try appendString(&msg, self.allocator, "CloseNotification");
+
+        // Header field 6: DESTINATION
+        try msg.append(self.allocator, 6); // HEADER_FIELD_DESTINATION
+        try appendSignature(&msg, self.allocator, "s");
+        try appendString(&msg, self.allocator, "org.freedesktop.Notifications");
+
+        // Header field 8: SIGNATURE
+        try msg.append(self.allocator, 8); // HEADER_FIELD_SIGNATURE
+        try appendSignature(&msg, self.allocator, "u"); // Single uint32 parameter
+
+        // Update header fields length
+        const header_fields_len: u32 = @intCast(msg.items.len - header_fields_start - 4);
+        std.mem.writeInt(u32, msg.items[header_fields_start..][0..4], header_fields_len, .little);
+
+        // Align to 8-byte boundary for body
+        const current_len = msg.items.len;
+        const padding = (8 - (current_len % 8)) % 8;
+        try msg.appendNTimes(self.allocator, 0, padding);
+
+        // Body: notification ID (uint32)
+        const body_start = msg.items.len;
+        try msg.writer(self.allocator).writeInt(u32, id, .little);
+
+        // Update body length in header
+        const body_len: u32 = @intCast(msg.items.len - body_start);
+        std.mem.writeInt(u32, msg.items[body_len_pos..][0..4], body_len, .little);
+
+        // Send the message (no reply expected)
+        _ = try conn.write(msg.items);
+    }
+
+    /// Read and parse D-Bus METHOD_RETURN message to extract notification ID.
+    ///
+    /// D-Bus reply message structure:
+    /// - Header (16 bytes): endianness, type, flags, version, body_len, serial, header_fields_len
+    /// - Header fields (variable): reply metadata
+    /// - Padding to 8-byte boundary
+    /// - Body (4 bytes): uint32 notification ID
+    ///
+    /// Returns the notification ID assigned by the daemon.
+    fn readNotifyReply(self: *LinuxBackend) !u32 {
+        const conn = self.connection orelse return error.NoConnection;
+
+        var header: [16]u8 = undefined;
+        const n = try conn.read(&header);
+        if (n < 16) return error.InvalidReply;
+
+        // Parse header
+        const endian = header[0];
+        if (endian != 'l') return error.UnsupportedEndianness;
+
+        const msg_type = header[1];
+        if (msg_type != 2) return error.NotMethodReturn; // 2 = METHOD_RETURN
+
+        const body_len = std.mem.readInt(u32, header[4..8], .little);
+        const serial = std.mem.readInt(u32, header[8..12], .little);
+        _ = serial;
+
+        const header_fields_len = std.mem.readInt(u32, header[12..16], .little);
+
+        // Skip header fields
+        var skip_buf: [1024]u8 = undefined;
+        var remaining = header_fields_len;
+        while (remaining > 0) {
+            const to_read = @min(remaining, skip_buf.len);
+            const read = try conn.read(skip_buf[0..to_read]);
+            remaining -= @intCast(read);
+        }
+
+        // Skip padding to 8-byte boundary
+        const total_header_len = 16 + header_fields_len;
+        const padding = (8 - (total_header_len % 8)) % 8;
+        if (padding > 0) {
+            _ = try conn.read(skip_buf[0..padding]);
+        }
+
+        // Read body (should be UINT32)
+        if (body_len < 4) return error.InvalidReplyBody;
+
+        var body: [4]u8 = undefined;
+        _ = try conn.read(&body);
+
+        const notif_id = std.mem.readInt(u32, &body, .little);
+
+        // Consume any remaining body
+        if (body_len > 4) {
+            remaining = body_len - 4;
+            while (remaining > 0) {
+                const to_read = @min(remaining, skip_buf.len);
+                const read = try conn.read(skip_buf[0..to_read]);
+                remaining -= @intCast(read);
+            }
+        }
+
+        return notif_id;
+    }
+
+    /// Close/dismiss a notification by ID via D-Bus CloseNotification method.
+    /// Sends a METHOD_CALL to org.freedesktop.Notifications.CloseNotification.
+    pub fn close(self: *LinuxBackend, id: u32) !void {
+        if (!self.available or self.connection == null) {
+            return errors.ZNotifyError.NotificationFailed;
+        }
+
+        const msg_serial = self.serial;
+        self.serial += 1;
+
+        try self.sendCloseNotificationMethodCall(id, msg_serial);
+    }
+
+    /// Return comma-separated list of supported capabilities.
+    /// Caller owns returned memory and must free it.
+    ///
+    /// Capabilities reported:
+    /// - body: Notification body text
+    /// - body-markup: HTML markup in body
+    /// - actions: Action buttons
+    /// - urgency: Urgency levels
+    /// - icon-static: Static icons
+    /// - persistence: Persistent notifications
+    pub fn getCapabilities(self: *LinuxBackend, allocator: std.mem.Allocator) ![]const u8 {
+        _ = self;
+        return allocator.dupe(u8, "body,body-markup,actions,urgency,icon-static,persistence");
+    }
+
+    /// Check if D-Bus connection was successfully established.
+    pub fn isAvailable(self: *LinuxBackend) bool {
+        return self.available;
+    }
+
+    /// VTable implementation for Linux backend.
+    pub const vtable = backend.Backend.VTable{
+        .init = @ptrCast(&LinuxBackend.init),
+        .deinit = @ptrCast(&LinuxBackend.deinit),
+        .send = @ptrCast(&LinuxBackend.send),
+        .close = @ptrCast(&LinuxBackend.close),
+        .getCapabilities = @ptrCast(&LinuxBackend.getCapabilities),
+        .isAvailable = @ptrCast(&LinuxBackend.isAvailable),
+    };
+};
+
+// D-Bus message marshalling helper functions
+
+/// Append D-Bus signature to message buffer.
+/// Format: length byte + signature string + NUL terminator
+fn appendSignature(list: *std.ArrayList(u8), allocator: std.mem.Allocator, sig: []const u8) !void {
+    try list.append(allocator, @intCast(sig.len));
+    try list.appendSlice(allocator, sig);
+    try list.append(allocator, 0); // NUL terminator
+}
+
+/// Append D-Bus string to message buffer.
+/// Format: uint32 length + string bytes + NUL terminator
+fn appendString(list: *std.ArrayList(u8), allocator: std.mem.Allocator, str: []const u8) !void {
+    try list.writer(allocator).writeInt(u32, @intCast(str.len), .little);
+    try list.appendSlice(allocator, str);
+    try list.append(allocator, 0); // NUL terminator
+}
+
+/// Append D-Bus object path to message buffer.
+/// Object paths must start with '/' and contain only valid characters.
+/// Format: same as string (uint32 length + path + NUL)
+fn appendObjectPath(list: *std.ArrayList(u8), allocator: std.mem.Allocator, path: []const u8) !void {
+    try list.writer(allocator).writeInt(u32, @intCast(path.len), .little);
+    try list.appendSlice(allocator, path);
+    try list.append(allocator, 0); // NUL terminator
+}
+
+/// Create and initialize Linux D-Bus notification backend.
+/// Connects to D-Bus session bus and returns a Backend interface.
+/// Connection failure is non-fatal; backend will report as unavailable.
+pub fn createBackend(allocator: std.mem.Allocator) !backend.Backend {
+    const linux_backend = try LinuxBackend.init(allocator);
+    return backend.Backend{
+        .ptr = linux_backend,
+        .vtable = &LinuxBackend.vtable,
+    };
 }

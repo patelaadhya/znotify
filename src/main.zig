@@ -7,19 +7,28 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const platform = backend.Platform.detect();
-    std.debug.print("Detected platform: {s}\n", .{platform.toString()});
+    // Try to create platform-specific backend
+    var platform_backend = backend.createPlatformBackend(allocator) catch |err| {
+        std.debug.print("Platform backend failed: {}, using terminal\n", .{err});
+        var term = try backend.createTerminalBackend(allocator);
+        defer term.deinit();
 
-    // Test terminal backend
-    var term_backend = try backend.createTerminalBackend(allocator);
-    defer term_backend.deinit();
+        var notif = try notification.Notification.init(allocator, "Platform Test", "Using terminal fallback");
+        defer notif.deinit();
 
-    var notif = try notification.Notification.init(allocator, "Test", "Terminal backend test");
+        const id = try term.send(notif);
+        std.debug.print("Notification sent with ID: {}\n", .{id});
+        return;
+    };
+    defer platform_backend.deinit();
+
+    var notif = try notification.Notification.init(allocator, "Platform Test", "Testing platform backend");
     defer notif.deinit();
-    notif.setUrgency(.critical);
 
-    const id = try term_backend.send(notif);
+    const id = try platform_backend.send(notif);
     std.debug.print("Notification sent with ID: {}\n", .{id});
 
-    try term_backend.close(id);
+    const caps = try platform_backend.getCapabilities(allocator);
+    defer allocator.free(caps);
+    std.debug.print("Backend capabilities: {s}\n", .{caps});
 }

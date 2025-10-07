@@ -1,0 +1,455 @@
+# Backend Implementation Roadmap
+
+This document tracks the implementation status and planned features for all platform backends.
+
+## Current Status Summary
+
+| Feature | Windows | Linux | macOS |
+|---------|---------|-------|-------|
+| Basic notification (title + message) | ✅ | ⚠️ Stub | ⚠️ Stub |
+| COM/Framework initialization | ✅ | N/A | ⚠️ TODO |
+| AppUserModelID / shortcut creation | ✅ | N/A | N/A |
+| Icon support | ❌ | ❌ | ❌ |
+| Urgency levels | ⚠️ Partial | ❌ | ❌ |
+| Timeout/duration | ⚠️ Hardcoded | ❌ | ❌ |
+| Action buttons | ❌ | ❌ | ❌ |
+| Sound/audio | ⚠️ Default | ❌ | ❌ |
+| Notification ID tracking | ❌ | ❌ | ❌ |
+| Click activation handling | ❌ | ❌ | ❌ |
+| Error handling | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic |
+
+**Legend:**
+- ✅ Fully implemented
+- ⚠️ Partially implemented or needs improvement
+- ❌ Not implemented
+
+## Platform-Specific Details
+
+### Windows Backend
+
+**Status:** Core functionality working, enhancements needed
+
+#### ✅ Completed (Phase 1)
+- [x] COM initialization and cleanup
+- [x] Start Menu shortcut creation with AppUserModelID
+- [x] WinRT Toast XML generation
+- [x] Basic notification display (title + message)
+- [x] PowerShell-based toast invocation
+- [x] Default notification sound
+
+#### 🚧 In Progress / Needs Work
+- [ ] **Urgency Level Mapping** (P0)
+  - Currently hardcoded to `duration="long"`
+  - Map `Urgency.low` → `duration="short"`
+  - Map `Urgency.normal` → `duration="long"`
+  - Map `Urgency.critical` → `duration="long"` + keep on screen
+
+- [ ] **Timeout Handling** (P0)
+  - Respect notification.timeout_ms parameter
+  - Map to toast duration and scenario attributes
+
+#### 📋 TODO (Phase 2)
+- [ ] **Custom Icon Support** (P1)
+  - Support local file paths in toast XML
+  - Support app resources (ms-appx:// protocol)
+  - Convert common image formats to compatible types
+  - Fallback to application icon
+
+- [ ] **Action Buttons** (P1)
+  - Add `<actions>` to toast XML
+  - Support up to 5 buttons per notification
+  - Button click handling via COM activation
+
+- [ ] **Audio Customization** (P2)
+  - Support different notification sounds
+  - Silent notifications option
+  - Map to ms-winsoundevent URIs
+
+- [ ] **Shell_NotifyIcon Fallback** (P1)
+  - Detect Windows 8.1 and earlier
+  - Implement balloon notification fallback
+  - System tray icon management
+
+- [ ] **Activation Handling** (P2)
+  - Implement COM activation handler
+  - Handle toast clicks and dismissals
+  - Execute callback commands
+
+- [ ] **Notification ID Tracking** (P1)
+  - Return Windows notification tag/group
+  - Enable notification updates
+  - Enable notification removal
+
+#### Technical Notes
+- **PowerShell Dependency**: Current implementation uses PowerShell to invoke WinRT APIs. Consider direct WinRT COM calls for better performance.
+- **AUMID Requirement**: Shortcut creation is mandatory for unpackaged apps. Must run on first use.
+- **Windows 8.1 Support**: Need to test fallback on older Windows versions.
+- **Performance**: Shortcut creation adds ~100ms to first notification. Cache shortcut existence check.
+
+---
+
+### Linux Backend
+
+**Status:** Stub implementation, full D-Bus integration needed
+
+#### ✅ Completed
+- [x] Platform detection
+- [x] Basic backend structure
+- [x] Error types defined
+
+#### 🚧 In Progress / Needs Work
+None - backend is currently a stub.
+
+#### 📋 TODO (Phase 1 - Core)
+- [ ] **D-Bus Connection** (P0)
+  - Connect to session bus
+  - Handle org.freedesktop.Notifications interface
+  - Method: `Notify(app_name, replaces_id, app_icon, summary, body, actions, hints, timeout)`
+
+- [ ] **Basic Notification Display** (P0)
+  - Send title as `summary`
+  - Send message as `body`
+  - Use app_name = "znotify"
+  - Return notification ID
+
+- [ ] **Urgency Level Support** (P0)
+  - Map to `urgency` hint (0=low, 1=normal, 2=critical)
+  - Include in D-Bus hints dictionary
+
+- [ ] **Timeout Handling** (P0)
+  - Pass notification.timeout_ms to D-Bus Notify
+  - Special value -1 for default timeout
+  - Special value 0 for never expires
+
+#### 📋 TODO (Phase 2 - Features)
+- [ ] **Icon Support** (P1)
+  - Support file:// URIs for local images
+  - Support icon theme names (e.g., "dialog-information")
+  - Support embedded image data via `image-data` hint
+
+- [ ] **Action Buttons** (P1)
+  - Pass actions array to D-Bus
+  - Format: ["action1", "Label 1", "action2", "Label 2"]
+  - Implement ActionInvoked signal handler
+
+- [ ] **Capabilities Detection** (P1)
+  - Call GetCapabilities to detect daemon features
+  - Fallback gracefully if features unsupported
+  - Cache capabilities for performance
+
+- [ ] **Notification Updates** (P1)
+  - Use replaces_id to update existing notifications
+  - Track notification IDs internally
+
+- [ ] **Sound Support** (P2)
+  - Use `sound-file` hint for custom sounds
+  - Use `sound-name` hint for theme sounds
+  - Suppress sound with `suppress-sound` hint
+
+- [ ] **Notification Closure** (P2)
+  - Implement NotificationClosed signal handler
+  - Track closure reason (expired, dismissed, closed by call)
+
+#### Technical Notes
+- **D-Bus Library**: Need to decide between:
+  - Dynamic loading of libdbus-1.so (recommended for zero-dependency goal)
+  - Static linking with dbus library
+  - Pure Zig D-Bus implementation (most complex but zero-dependency)
+- **Daemon Compatibility**: Must work with Dunst, Mako, notify-osd, GNOME Shell, KDE Plasma, XFCE4-notifyd
+- **X11 vs Wayland**: Protocol is compositor-agnostic via D-Bus
+- **Testing**: Use Docker environment with Dunst daemon
+
+---
+
+### macOS Backend
+
+**Status:** Stub implementation, Objective-C bridge needed
+
+#### ✅ Completed
+- [x] Platform detection
+- [x] Basic backend structure
+- [x] Error types defined
+
+#### 🚧 In Progress / Needs Work
+None - backend is currently a stub.
+
+#### 📋 TODO (Phase 1 - Core)
+- [ ] **Framework Initialization** (P0)
+  - Import UserNotifications framework (macOS 10.14+)
+  - Import AppKit/NSUserNotificationCenter (macOS 10.12-10.13)
+  - Runtime version detection for API selection
+
+- [ ] **UNUserNotificationCenter Implementation** (P0 - Modern API)
+  - Request authorization
+  - Create UNMutableNotificationContent
+  - Set title and body
+  - Create UNNotificationRequest
+  - Schedule notification
+
+- [ ] **NSUserNotificationCenter Fallback** (P0 - Legacy API)
+  - Create NSUserNotification
+  - Set title, informativeText
+  - Deliver notification
+  - Handle deprecation warnings
+
+- [ ] **Basic Notification Display** (P0)
+  - Title and message support
+  - Return notification identifier
+
+#### 📋 TODO (Phase 2 - Features)
+- [ ] **Icon Support** (P1)
+  - Use app icon automatically
+  - Custom icon via UNNotificationAttachment
+  - Support local file paths
+
+- [ ] **Urgency/Priority Levels** (P1)
+  - Map to UNNotificationInterruptionLevel
+  - .passive (low), .active (normal), .timeSensitive (critical)
+  - Requires special entitlement for timeSensitive
+
+- [ ] **Timeout Handling** (P1)
+  - Configure via UNNotificationSettings
+  - System controls display duration
+  - May not support custom timeouts
+
+- [ ] **Action Buttons** (P1)
+  - Define UNNotificationAction objects
+  - Create UNNotificationCategory
+  - Register categories with center
+  - Implement delegate for action responses
+
+- [ ] **Sound Support** (P2)
+  - Set UNNotificationSound
+  - Default, custom, or silent
+  - Support for system sounds
+
+- [ ] **Notification Updates** (P2)
+  - Use same identifier to replace
+  - Remove delivered notifications
+
+- [ ] **Click Handling** (P2)
+  - Implement UNUserNotificationCenterDelegate
+  - Handle userNotificationCenter(_:didReceive:)
+  - Execute callback commands
+
+#### Technical Notes
+- **Objective-C Bridge**: Need to use Zig's `@cImport` or manual extern declarations
+- **Framework Linking**: Link Foundation, AppKit, UserNotifications frameworks
+- **Sandbox Considerations**: Unsigned/unnotarized apps may have limitations
+- **Authorization**: Must request and handle user permission
+- **Modern vs Legacy**: Prioritize UNUserNotificationCenter, fall back to NSUserNotificationCenter
+- **Testing**: Requires physical macOS machine or VM
+
+---
+
+## Implementation Phases
+
+### Phase 0: Foundation (COMPLETED)
+- ✅ Platform abstraction layer
+- ✅ Backend interface definition
+- ✅ Windows core implementation
+- ✅ Cross-platform testing infrastructure
+
+### Phase 1: Core Functionality (CURRENT)
+**Priority:** Get basic notifications working on all three platforms
+
+**Linux (Immediate):**
+1. D-Bus connection and basic Notify method
+2. Title + message display
+3. Urgency levels
+4. Timeout handling
+5. Integration tests with Docker/Dunst
+
+**macOS (Next):**
+1. Framework initialization and version detection
+2. UNUserNotificationCenter implementation
+3. NSUserNotificationCenter fallback
+4. Title + message display
+5. Authorization handling
+
+**Windows (Refinement):**
+1. Fix urgency level mapping
+2. Proper timeout handling
+3. Performance optimization (cache shortcut check)
+
+### Phase 2: Feature Parity
+**Priority:** Match notify-send feature set
+
+**All Platforms:**
+1. Custom icon support
+2. Notification ID tracking and updates
+3. Action buttons (where supported)
+4. Sound customization
+5. Error handling improvements
+
+### Phase 3: Platform-Specific Enhancements
+**Priority:** Leverage unique platform capabilities
+
+**Windows:**
+- Direct WinRT COM calls (eliminate PowerShell)
+- COM activation handler for callbacks
+- Shell_NotifyIcon fallback for Windows 8.1
+
+**Linux:**
+- Full capabilities detection
+- Signal handling (ActionInvoked, NotificationClosed)
+- Resident notifications (timeout=0)
+
+**macOS:**
+- Notification categories and actions
+- Rich media attachments
+- Critical alerts (with entitlement)
+
+### Phase 4: Polish & Optimization
+**Priority:** Production readiness
+
+**All Platforms:**
+- Comprehensive error messages
+- Performance benchmarking
+- Memory leak detection
+- Edge case handling
+- Accessibility features
+- Dark mode icon variants
+
+---
+
+## Feature Priority Matrix
+
+### P0 (Must Have - Required for v1.0)
+- Basic notification display (title + message)
+- Platform initialization/cleanup
+- Urgency level support
+- Timeout handling
+- Basic error handling
+- Notification ID return
+
+### P1 (Should Have - Required for notify-send compatibility)
+- Custom icon support
+- Notification updates (by ID)
+- Action buttons (Linux/macOS)
+- Capabilities detection (Linux)
+- Fallback implementations (Windows 8.1, macOS 10.12)
+
+### P2 (Nice to Have - Enhanced features)
+- Sound customization
+- Click activation callbacks
+- Notification closure tracking
+- Rich media attachments
+- Progress bars
+- Critical alerts
+
+### P3 (Future Enhancements)
+- Notification history
+- Desktop-specific themes
+- Animation control
+- Multi-monitor positioning
+- Grouping/threading
+
+---
+
+## Testing Requirements
+
+### Per-Platform Test Coverage
+- [ ] Windows 10/11 (WinRT Toast)
+- [ ] Windows 8.1 (Shell_NotifyIcon fallback)
+- [ ] Ubuntu 22.04 (GNOME Shell)
+- [ ] Ubuntu 22.04 (Dunst via Docker)
+- [ ] Fedora (GNOME Shell)
+- [ ] Arch Linux (Mako)
+- [ ] KDE Plasma
+- [ ] XFCE4
+- [ ] macOS 11+ (UNUserNotificationCenter)
+- [ ] macOS 10.12-10.13 (NSUserNotificationCenter)
+
+### Feature Test Matrix
+For each platform, verify:
+- Basic notification appears
+- Title and message display correctly
+- Icons render properly
+- Urgency affects presentation
+- Timeouts work as expected
+- Action buttons function (where supported)
+- Sound plays or mutes correctly
+- Errors return meaningful messages
+- Memory cleanup (no leaks)
+- Performance meets targets (<50ms)
+
+---
+
+## Known Issues & Blockers
+
+### Windows
+- **PowerShell dependency**: Current implementation requires PowerShell for WinRT interop. Performance cost ~30-50ms per notification.
+- **First-run delay**: Shortcut creation adds ~100ms on first notification.
+- **No native COM activation**: Cannot handle toast clicks/dismissals without implementing COM activation handler.
+
+### Linux
+- **Zero-dependency goal**: Need to implement D-Bus protocol directly or dynamically load libdbus-1.so.
+- **Testing complexity**: Requires X11/Wayland environment with notification daemon running.
+- **Daemon variations**: Behavior differs between Dunst, Mako, notify-osd, desktop environments.
+
+### macOS
+- **No macOS development environment**: Need physical Mac or VM for implementation and testing.
+- **Objective-C bridge**: Zig's C interop requires careful handling of Objective-C runtime.
+- **Authorization flow**: Apps must request permission before showing notifications.
+- **Code signing**: Unsigned apps may have limited notification capabilities.
+
+---
+
+## Dependencies & External Tools
+
+### Windows
+- **Required:** Windows SDK headers (GUID definitions, COM interfaces)
+- **Runtime:** PowerShell 5.1+ (current), ole32.dll, shell32.dll
+- **Optional:** Windows 10 SDK for native WinRT headers
+
+### Linux
+- **Required:** D-Bus protocol specification
+- **Runtime:** D-Bus session bus daemon, notification daemon (dunst/mako/notify-osd/etc.)
+- **Optional:** libdbus-1.so (if not implementing protocol directly)
+
+### macOS
+- **Required:** macOS SDK (Foundation, AppKit, UserNotifications frameworks)
+- **Runtime:** macOS 10.12+
+- **Optional:** Xcode Command Line Tools for development
+
+---
+
+## Contributing Guidelines
+
+When implementing backend features:
+
+1. **Follow the platform abstraction contract** - All backends must implement the `Backend` interface in `platform/backend.zig`
+
+2. **Maintain cross-platform parity** - Features should work consistently across platforms when possible
+
+3. **Fail gracefully** - Unsupported features should return clear errors, not crash
+
+4. **Test thoroughly** - Add integration tests for each new feature, use Docker for Linux testing
+
+5. **Document limitations** - Update this roadmap with platform-specific constraints
+
+6. **Keep it lightweight** - Every feature must maintain <50ms execution time and <5MB memory usage
+
+7. **Zero dependencies** - Prefer dynamic loading or direct protocol implementation over linking libraries
+
+---
+
+## References
+
+### Windows
+- [Windows App SDK - Toast Notifications](https://docs.microsoft.com/windows/apps/design/shell/tiles-and-notifications/toast-schema)
+- [Desktop Bridge - AppUserModelID](https://docs.microsoft.com/windows/win32/shell/appids)
+- [Shell_NotifyIcon (Win32)](https://docs.microsoft.com/windows/win32/api/shellapi/nf-shellapi-shell_notifyiconw)
+
+### Linux
+- [Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/)
+- [D-Bus Specification](https://dbus.freedesktop.org/doc/dbus-specification.html)
+
+### macOS
+- [UserNotifications Framework](https://developer.apple.com/documentation/usernotifications)
+- [NSUserNotificationCenter (Deprecated)](https://developer.apple.com/documentation/foundation/nsusernotificationcenter)
+
+---
+
+Last Updated: 2025-10-07

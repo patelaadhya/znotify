@@ -210,22 +210,40 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs:
 ## Platform-Specific Implementation Notes
 
 ### Windows
+- **Status**: ✅ **IMPLEMENTED** - Core functionality working
 - Primary: WinRT Toast API for Windows 10+
-- Fallback: Win32 Shell_NotifyIcon for Windows 8.1
-- Link libraries: `ole32`, `shell32`, `user32`
-- Subsystem must be `.Console`
+- COM initialization for WinRT interop
+- Start Menu shortcut creation with AppUserModelID (required for unpackaged apps)
+- PowerShell bridge for WinRT API access
+- Link libraries: `ole32` (dynamically loaded)
+- Subsystem: `.Console`
+- **Working Features**:
+  - Toast notifications with title and message
+  - Urgency mapping (audio and scenario attributes)
+  - Action Center persistence
+  - XML escaping for safety
+- **TODO**:
+  - Custom icon support
+  - Action buttons with COM activation handler
+  - Direct WinRT COM calls (eliminate PowerShell dependency)
+  - Shell_NotifyIcon fallback for Windows 8.1
+  - Configurable timeout handling
 
 ### Linux
+- **Status**: ⚠️ **STUB** - Not yet implemented
 - Primary: D-Bus interface to notification daemon
 - Protocol: `org.freedesktop.Notifications` specification
 - Link library: `c` (D-Bus loaded dynamically to avoid hard dependency)
 - Compatible with: GNOME, KDE, Dunst, Mako, notify-osd, XFCE4-notifyd
+- See `docs/backend-roadmap.md` for implementation plan
 
 ### macOS
+- **Status**: ⚠️ **STUB** - Not yet implemented
 - Primary: UserNotifications framework (macOS 10.14+)
 - Fallback: NSUserNotificationCenter (macOS 10.12+)
 - Link frameworks: `Foundation`, `AppKit`
 - Link library: `objc`
+- See `docs/backend-roadmap.md` for implementation plan
 
 ## Error Handling Philosophy
 
