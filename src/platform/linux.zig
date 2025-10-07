@@ -182,6 +182,80 @@ pub const LinuxBackend = struct {
         try self.sendHello();
     }
 
+    /// Send GetCapabilities() method call to notification daemon.
+    /// Returns the capabilities supported by the daemon.
+    fn sendGetCapabilitiesMethodCall(self: *LinuxBackend, serial: u32) !void {
+        const conn = self.connection orelse return error.NoConnection;
+
+        var msg: std.ArrayList(u8) = .{};
+        try msg.ensureTotalCapacity(self.allocator, 512);
+        defer msg.deinit(self.allocator);
+
+        // Endianness
+        try msg.append(self.allocator, 'l');
+        // Message type (METHOD_CALL)
+        try msg.append(self.allocator, 1);
+        // Flags
+        try msg.append(self.allocator, 0);
+        // Protocol version
+        try msg.append(self.allocator, 1);
+
+        // Body length (no parameters)
+        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+
+        // Serial
+        try msg.writer(self.allocator).writeInt(u32, serial, .little);
+
+        // Build header fields
+        var header_fields: std.ArrayList(u8) = .{};
+        try header_fields.ensureTotalCapacity(self.allocator, 256);
+        defer header_fields.deinit(self.allocator);
+
+        // PATH
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 1);
+        try appendSignature(&header_fields, self.allocator, "o");
+        try appendObjectPath(&header_fields, self.allocator, "/org/freedesktop/Notifications");
+
+        // INTERFACE
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 2);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.Notifications");
+
+        // MEMBER
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 3);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "GetCapabilities");
+
+        // DESTINATION
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 6);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.Notifications");
+
+        // Write header fields
+        try msg.writer(self.allocator).writeInt(u32, @intCast(header_fields.items.len), .little);
+        try msg.appendSlice(self.allocator, header_fields.items);
+
+        // Pad to 8-byte boundary (no body)
+        while (msg.items.len % 8 != 0) {
+            try msg.append(self.allocator, 0);
+        }
+
+        // Send message
+        _ = try conn.write(msg.items);
+    }
+
     /// Send Hello() message to D-Bus to establish connection and get unique name.
     /// This must be called after authentication and before any other D-Bus method calls.
     fn sendHello(self: *LinuxBackend) !void {
@@ -653,6 +727,131 @@ pub const LinuxBackend = struct {
         }
     }
 
+    /// Read and parse D-Bus METHOD_RETURN message to extract capabilities array.
+    ///
+    /// D-Bus reply message structure:
+    /// - Header (16 bytes): endianness, type, flags, version, body_len, serial, header_fields_len
+    /// - Header fields (variable): reply metadata
+    /// - Padding to 8-byte boundary
+    /// - Body: ARRAY of STRING (signature "as")
+    ///
+    /// Returns comma-separated string of capabilities. Caller owns memory.
+    fn readCapabilitiesReply(self: *LinuxBackend, allocator: std.mem.Allocator) ![]const u8 {
+        const conn = self.connection orelse return error.NoConnection;
+
+        // Loop to handle multiple messages (signals, etc.) until we get METHOD_RETURN
+        while (true) {
+            var header: [16]u8 = undefined;
+            try readExact(conn, &header);
+
+            // Parse header
+            const endian = header[0];
+            if (endian != 'l') return error.UnsupportedEndianness;
+
+            const msg_type = header[1];
+            const body_len = std.mem.readInt(u32, header[4..8], .little);
+            const header_fields_len = std.mem.readInt(u32, header[12..16], .little);
+
+            // If this is not a METHOD_RETURN, skip the entire message
+            if (msg_type != 2) { // 2 = METHOD_RETURN
+                // Skip header fields
+                var skip_buf: [1024]u8 = undefined;
+                var remaining = header_fields_len;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    try readExact(conn, skip_buf[0..to_read]);
+                    remaining -= to_read;
+                }
+
+                // Skip padding to 8-byte boundary
+                const total_header_len = 16 + header_fields_len;
+                const padding = (8 - (total_header_len % 8)) % 8;
+                if (padding > 0) {
+                    try readExact(conn, skip_buf[0..padding]);
+                }
+
+                // Skip body
+                remaining = body_len;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    try readExact(conn, skip_buf[0..to_read]);
+                    remaining -= to_read;
+                }
+                continue;
+            }
+
+            // Skip header fields (we don't need them)
+            var skip_buf: [1024]u8 = undefined;
+            var remaining = header_fields_len;
+            while (remaining > 0) {
+                const to_read = @min(remaining, skip_buf.len);
+                try readExact(conn, skip_buf[0..to_read]);
+                remaining -= to_read;
+            }
+
+            // Skip padding to 8-byte boundary
+            const total_header_len = 16 + header_fields_len;
+            const padding = (8 - (total_header_len % 8)) % 8;
+            if (padding > 0) {
+                try readExact(conn, skip_buf[0..padding]);
+            }
+
+            // Read body - array of strings (signature "as")
+            if (body_len < 4) return error.InvalidReplyBody;
+
+            // Read all body bytes into buffer
+            const body = try allocator.alloc(u8, body_len);
+            defer allocator.free(body);
+            try readExact(conn, body);
+
+            // Parse array of strings
+            // First 4 bytes: array length (total bytes in array, not count)
+            const array_len = std.mem.readInt(u32, body[0..4], .little);
+            if (array_len > body_len - 4) return error.InvalidReplyBody;
+
+            // Build comma-separated string
+            var result: std.ArrayList(u8) = .{};
+            defer result.deinit(allocator);
+
+            var array_offset: usize = 0; // Track position within the array data
+            const array_data_start: usize = 4; // Array data starts after length field
+            var first = true;
+
+            while (array_offset < array_len) {
+                // Calculate absolute position in body buffer
+                const body_offset = array_data_start + array_offset;
+
+                // Strings in arrays need 4-byte alignment - check alignment relative to message start
+                const alignment_padding = (4 - (body_offset % 4)) % 4;
+                array_offset += alignment_padding;
+
+                // Each string: 4-byte length + string bytes + NUL
+                const final_offset = array_data_start + array_offset;
+                if (final_offset + 4 > body.len) break;
+
+                const str_len = std.mem.readInt(u32, body[final_offset..][0..4], .little);
+                array_offset += 4;
+
+                const str_start = array_data_start + array_offset;
+                if (str_start + str_len + 1 > body.len) break;
+
+                const str = body[str_start .. str_start + str_len];
+                array_offset += str_len + 1; // +1 for NUL terminator
+
+                // Add comma separator (except for first item)
+                if (!first) {
+                    try result.append(allocator, ',');
+                }
+                first = false;
+
+                // Add capability string
+                try result.appendSlice(allocator, str);
+            }
+
+            return result.toOwnedSlice(allocator);
+        }
+    }
+
     /// Close/dismiss a notification by ID via D-Bus CloseNotification method.
     /// Sends a METHOD_CALL to org.freedesktop.Notifications.CloseNotification.
     pub fn close(self: *LinuxBackend, id: u32) !void {
@@ -677,8 +876,18 @@ pub const LinuxBackend = struct {
     /// - icon-static: Static icons
     /// - persistence: Persistent notifications
     pub fn getCapabilities(self: *LinuxBackend, allocator: std.mem.Allocator) ![]const u8 {
-        _ = self;
-        return allocator.dupe(u8, "body,body-markup,actions,urgency,icon-static,persistence");
+        if (!self.available or self.connection == null) {
+            return allocator.dupe(u8, "");
+        }
+
+        // Send GetCapabilities method call
+        const msg_serial = self.serial;
+        self.serial += 1;
+        try self.sendGetCapabilitiesMethodCall(msg_serial);
+
+        // Read and parse response
+        const caps_list = try self.readCapabilitiesReply(allocator);
+        return caps_list;
     }
 
     /// Check if D-Bus connection was successfully established.
