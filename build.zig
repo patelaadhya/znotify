@@ -64,4 +64,18 @@ pub fn build(b: *std.Build) void {
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    // Benchmark command
+    const bench = b.addExecutable(.{
+        .name = "bench",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/bench.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    bench.root_module.addOptions("build_options", options);
+    const run_bench = b.addRunArtifact(bench);
+    const bench_step = b.step("bench", "Run performance benchmarks");
+    bench_step.dependOn(&run_bench.step);
 }

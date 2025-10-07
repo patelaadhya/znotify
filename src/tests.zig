@@ -119,3 +119,54 @@ test "Special commands" {
         try testing.expect(config.version);
     }
 }
+
+const validation = @import("utils/validation.zig");
+const escaping = @import("utils/escaping.zig");
+
+test "Validate title" {
+    // Valid title
+    _ = try validation.validateTitle("Valid Title");
+
+    // Empty title should fail
+    try testing.expectError(errors.ZNotifyError.MissingRequiredField, validation.validateTitle(""));
+
+    // Too long title should fail
+    const long_title = "a" ** 101;
+    try testing.expectError(errors.ZNotifyError.TitleTooLong, validation.validateTitle(long_title));
+}
+
+test "XML escaping" {
+    const allocator = testing.allocator;
+
+    const input = "<test> & \"quotes\"";
+    const escaped = try validation.escapeXml(allocator, input);
+    defer allocator.free(escaped);
+
+    try testing.expectEqualStrings("&lt;test&gt; &amp; &quot;quotes&quot;", escaped);
+}
+
+test "String truncation" {
+    const allocator = testing.allocator;
+
+    const text = "Hello World";
+    const truncated = try validation.truncateString(allocator, text, 8);
+    defer allocator.free(truncated);
+
+    try testing.expectEqualStrings("Hello...", truncated);
+}
+
+test "UTF-8 validation" {
+    try testing.expect(validation.isValidUtf8("Hello World"));
+    try testing.expect(validation.isValidUtf8("Hello 世界"));
+    try testing.expect(!validation.isValidUtf8(&[_]u8{ 0xFF, 0xFE, 0xFD }));
+}
+
+test "Shell escaping" {
+    const allocator = testing.allocator;
+
+    const input = "test; rm -rf /";
+    const escaped = try escaping.escapeShell(allocator, input);
+    defer allocator.free(escaped);
+
+    try testing.expectEqualStrings("'test; rm -rf /'", escaped);
+}

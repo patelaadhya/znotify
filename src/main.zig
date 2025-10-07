@@ -1,27 +1,26 @@
 const std = @import("std");
-const cli = @import("cli.zig");
+const validation = @import("utils/validation.zig");
+const escaping = @import("utils/escaping.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    // Test validation
+    const title = try validation.validateTitle("Test Title");
+    std.debug.print("Valid title: {s}\n", .{title});
 
-    var parser = cli.ArgParser.init(allocator, args);
-    const config = parser.parse() catch |err| {
-        std.debug.print("Parse error: {}\n", .{err});
-        return;
-    };
+    // Test escaping
+    const text = "Test <message> with \"quotes\" & special chars";
+    const escaped = try validation.escapeXml(allocator, text);
+    defer allocator.free(escaped);
+    std.debug.print("Original: {s}\n", .{text});
+    std.debug.print("Escaped: {s}\n", .{escaped});
 
-    if (config.help) {
-        try cli.printHelp();
-    } else if (config.version) {
-        try cli.printVersion();
-    } else {
-        std.debug.print("Title: {?s}\n", .{config.title});
-        std.debug.print("Message: {?s}\n", .{config.message});
-        std.debug.print("Debug: {}\n", .{config.debug});
-    }
+    // Test truncation
+    const long_text = "This is a very long text that needs to be truncated";
+    const truncated = try validation.truncateString(allocator, long_text, 20);
+    defer allocator.free(truncated);
+    std.debug.print("Truncated: {s}\n", .{truncated});
 }
