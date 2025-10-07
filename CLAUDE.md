@@ -230,12 +230,26 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs:
   - Configurable timeout handling
 
 ### Linux
-- **Status**: ⚠️ **STUB** - Not yet implemented
+- **Status**: ✅ **PHASE 1 COMPLETE** - Core D-Bus functionality working
 - Primary: D-Bus interface to notification daemon
 - Protocol: `org.freedesktop.Notifications` specification
-- Link library: `c` (D-Bus loaded dynamically to avoid hard dependency)
+- Implementation: Pure Zig D-Bus binary protocol (zero dependencies)
+- **Working Features**:
+  - D-Bus connection via UNIX socket with EXTERNAL authentication
+  - Hello() handshake for connection establishment
+  - Basic notifications with title and message
+  - Urgency levels (low/normal/critical) with proper hints encoding
+  - Timeout handling (persistent, timed, default)
+  - Notification ID tracking and return
+  - Message filtering (handles signals vs method returns)
 - Compatible with: GNOME, KDE, Dunst, Mako, notify-osd, XFCE4-notifyd
-- See `docs/backend-roadmap.md` for implementation plan
+- **TODO (Phase 2)**:
+  - Custom icon support
+  - Action buttons with signal handlers
+  - Capabilities detection
+  - Notification updates via replaces_id
+  - Sound hints
+- See `docs/backend-roadmap.md` for full implementation plan
 
 ### macOS
 - **Status**: ⚠️ **STUB** - Not yet implemented

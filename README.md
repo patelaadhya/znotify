@@ -16,20 +16,26 @@ A lightweight, cross-platform command-line utility for desktop notifications wri
 
 Currently implemented:
 - Core notification data structures
-- CLI argument parser
+- CLI argument parser with full option support
 - Input validation and sanitization
 - Error handling with user-friendly messages
 - Performance benchmarks
 - Docker-based testing infrastructure
 - Platform abstraction layer
-- Windows notifications (WinRT Toast API with COM integration)
+- **Windows notifications** (WinRT Toast API with COM integration)
   - Toast notifications with title and message
   - Start Menu shortcut creation with AppUserModelID
   - Urgency level mapping (audio and scenario)
   - Action Center integration
+- **Linux notifications** (D-Bus implementation - Phase 1 complete)
+  - D-Bus binary protocol implementation (zero dependencies)
+  - Basic notifications with title and message
+  - Urgency levels (low/normal/critical) with visual distinction
+  - Timeout handling (persistent, timed, or default)
+  - Compatible with all notification daemons (Dunst, Mako, notify-osd, GNOME, KDE, XFCE)
 
 Coming soon:
-- Linux notifications (D-Bus implementation)
+- Linux Phase 2: Icons, action buttons, capabilities detection
 - macOS notifications (UserNotifications framework)
 - Custom icon support (all platforms)
 - Action buttons (all platforms)

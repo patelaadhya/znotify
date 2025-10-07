@@ -6,17 +6,17 @@ This document tracks the implementation status and planned features for all plat
 
 | Feature | Windows | Linux | macOS |
 |---------|---------|-------|-------|
-| Basic notification (title + message) | ✅ | ⚠️ Stub | ⚠️ Stub |
-| COM/Framework initialization | ✅ | N/A | ⚠️ TODO |
+| Basic notification (title + message) | ✅ | ✅ | ⚠️ Stub |
+| COM/Framework initialization | ✅ | ✅ | ⚠️ TODO |
 | AppUserModelID / shortcut creation | ✅ | N/A | N/A |
 | Icon support | ❌ | ❌ | ❌ |
-| Urgency levels | ⚠️ Partial | ❌ | ❌ |
-| Timeout/duration | ⚠️ Hardcoded | ❌ | ❌ |
+| Urgency levels | ⚠️ Partial | ✅ | ❌ |
+| Timeout/duration | ⚠️ Hardcoded | ✅ | ❌ |
 | Action buttons | ❌ | ❌ | ❌ |
 | Sound/audio | ⚠️ Default | ❌ | ❌ |
-| Notification ID tracking | ❌ | ❌ | ❌ |
+| Notification ID tracking | ❌ | ✅ | ❌ |
 | Click activation handling | ❌ | ❌ | ❌ |
-| Error handling | ⚠️ Basic | ⚠️ Basic | ⚠️ Basic |
+| Error handling | ⚠️ Basic | ✅ | ⚠️ Basic |
 
 **Legend:**
 - ✅ Fully implemented
@@ -90,36 +90,34 @@ This document tracks the implementation status and planned features for all plat
 
 ### Linux Backend
 
-**Status:** Stub implementation, full D-Bus integration needed
+**Status:** ✅ Phase 1 Complete - Core D-Bus functionality working
 
-#### ✅ Completed
+#### ✅ Completed (Phase 1)
 - [x] Platform detection
 - [x] Basic backend structure
 - [x] Error types defined
-
-#### 🚧 In Progress / Needs Work
-None - backend is currently a stub.
-
-#### 📋 TODO (Phase 1 - Core)
-- [ ] **D-Bus Connection** (P0)
-  - Connect to session bus
+- [x] **D-Bus Connection** (P0)
+  - Connect to session bus via UNIX socket
+  - EXTERNAL authentication with UID
+  - Hello() handshake for connection establishment
   - Handle org.freedesktop.Notifications interface
   - Method: `Notify(app_name, replaces_id, app_icon, summary, body, actions, hints, timeout)`
-
-- [ ] **Basic Notification Display** (P0)
+- [x] **Basic Notification Display** (P0)
   - Send title as `summary`
   - Send message as `body`
   - Use app_name = "znotify"
-  - Return notification ID
-
-- [ ] **Urgency Level Support** (P0)
+  - Return notification ID from daemon
+- [x] **Urgency Level Support** (P0)
   - Map to `urgency` hint (0=low, 1=normal, 2=critical)
-  - Include in D-Bus hints dictionary
-
-- [ ] **Timeout Handling** (P0)
-  - Pass notification.timeout_ms to D-Bus Notify
+  - Properly encode D-Bus `a{sv}` hints dictionary
+  - Visual distinction works with mako/dunst configuration
+- [x] **Timeout Handling** (P0)
+  - Pass notification.timeout_ms to D-Bus Notify as int32
   - Special value -1 for default timeout
-  - Special value 0 for never expires
+  - Special value 0 for never expires (persistent notifications)
+
+#### 🚧 In Progress / Needs Work
+None - Phase 1 complete!
 
 #### 📋 TODO (Phase 2 - Features)
 - [ ] **Icon Support** (P1)

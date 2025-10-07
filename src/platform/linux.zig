@@ -427,12 +427,33 @@ pub const LinuxBackend = struct {
         }
         try msg.writer(self.allocator).writeInt(u32, 0, .little);
 
-        // a{sv}: hints (empty dict)
-        // Dict entries are 8-byte aligned, but empty array just needs 4-byte alignment for length
+        // a{sv}: hints (dict with urgency)
+        // Build hints dictionary with urgency level
+        var hints: std.ArrayList(u8) = .{};
+        try hints.ensureTotalCapacity(self.allocator, 64);
+        defer hints.deinit(self.allocator);
+
+        // Map urgency to D-Bus notification spec values: 0=low, 1=normal, 2=critical
+        const urgency_value: u8 = switch (notif.urgency) {
+            .low => 0,
+            .normal => 1,
+            .critical => 2,
+        };
+        try appendHintEntry(&hints, self.allocator, "urgency", urgency_value);
+
+        // Write hints array: 4-byte aligned length + padding + array contents
         while (msg.items.len % 4 != 0) {
             try msg.append(self.allocator, 0);
         }
-        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+        try msg.writer(self.allocator).writeInt(u32, @intCast(hints.items.len), .little);
+
+        // After array length, align to 8 bytes for dict entries (if array is non-empty)
+        if (hints.items.len > 0) {
+            while (msg.items.len % 8 != 0) {
+                try msg.append(self.allocator, 0);
+            }
+        }
+        try msg.appendSlice(self.allocator, hints.items);
 
         // i: expire_timeout
         const timeout: i32 = if (notif.timeout_ms) |t| @intCast(t) else -1;
@@ -692,6 +713,27 @@ fn appendString(list: *std.ArrayList(u8), allocator: std.mem.Allocator, str: []c
     try list.writer(allocator).writeInt(u32, @intCast(str.len), .little);
     try list.appendSlice(allocator, str);
     try list.append(allocator, 0); // NUL terminator
+}
+
+/// Append D-Bus variant containing a byte value to message buffer.
+/// Format: signature length (1 byte) + signature ('y') + NUL + value
+/// Note: Signature string does NOT include length byte, just the type char + NUL
+fn appendVariantByte(list: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u8) !void {
+    try list.append(allocator, 1); // signature string length (just 'y', not including NUL)
+    try list.append(allocator, 'y'); // byte type signature
+    try list.append(allocator, 0); // NUL terminator for signature
+    try list.append(allocator, value); // actual byte value
+}
+
+/// Append D-Bus dict entry {sv} to hints array.
+/// Format: dict entry with string key and variant value
+/// Note: Caller must ensure 8-byte alignment before calling this
+fn appendHintEntry(list: *std.ArrayList(u8), allocator: std.mem.Allocator, key: []const u8, value: u8) !void {
+    // String key - already includes 4-byte length prefix in appendString
+    try appendString(list, allocator, key);
+
+    // Variant value - signature is 1-byte aligned, value follows
+    try appendVariantByte(list, allocator, value);
 }
 
 /// Append D-Bus object path to message buffer.
