@@ -66,3 +66,56 @@ test "Error context formatting" {
     try testing.expectEqual(@as(i32, 42), context.platform_code.?);
     try testing.expectEqual(errors.ZNotifyError.InvalidIconPath, context.error_type);
 }
+
+const cli = @import("cli.zig");
+
+test "Parse basic arguments" {
+    const allocator = testing.allocator;
+    const args = [_][]const u8{ "znotify", "Title", "Message" };
+
+    var parser = cli.ArgParser.init(allocator, &args);
+    const config = try parser.parse();
+
+    try testing.expectEqualStrings("Title", config.title.?);
+    try testing.expectEqualStrings("Message", config.message.?);
+}
+
+test "Parse short options" {
+    const allocator = testing.allocator;
+    const args = [_][]const u8{ "znotify", "-u", "critical", "-t", "3000", "Title" };
+
+    var parser = cli.ArgParser.init(allocator, &args);
+    const config = try parser.parse();
+
+    try testing.expectEqual(notification.Urgency.critical, config.urgency.?);
+    try testing.expectEqual(@as(u32, 3000), config.timeout_ms.?);
+}
+
+test "Parse long options" {
+    const allocator = testing.allocator;
+    const args = [_][]const u8{ "znotify", "--urgency=low", "--timeout=1000", "Title" };
+
+    var parser = cli.ArgParser.init(allocator, &args);
+    const config = try parser.parse();
+
+    try testing.expectEqual(notification.Urgency.low, config.urgency.?);
+    try testing.expectEqual(@as(u32, 1000), config.timeout_ms.?);
+}
+
+test "Special commands" {
+    const allocator = testing.allocator;
+
+    {
+        const args = [_][]const u8{ "znotify", "--help" };
+        var parser = cli.ArgParser.init(allocator, &args);
+        const config = try parser.parse();
+        try testing.expect(config.help);
+    }
+
+    {
+        const args = [_][]const u8{ "znotify", "--version" };
+        var parser = cli.ArgParser.init(allocator, &args);
+        const config = try parser.parse();
+        try testing.expect(config.version);
+    }
+}
