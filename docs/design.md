@@ -894,5 +894,3 @@ notifier.send("Hello", "World", timeout=5000, icon="info")
 | 1.0.0 | 2025-10-06 | Design Team | Initial design document |
 
 ---
-
-*This design document serves as the authoritative guide for implementing ZNotify. All implementation decisions should reference this document, and any deviations should be documented and justified.*
