@@ -29,23 +29,23 @@ COMMAND="${1:-test}"
 case "$COMMAND" in
     test)
         echo -e "${YELLOW}Running tests in Linux container...${NC}"
-        docker-compose -f docker/docker-compose.yml run --rm test
+        docker compose -f docker/docker-compose.yml run --rm test
         ;;
     bench)
         echo -e "${YELLOW}Running benchmarks in Linux container...${NC}"
-        docker-compose -f docker/docker-compose.yml run --rm bench
+        docker compose -f docker/docker-compose.yml run --rm bench
         ;;
     shell)
         echo -e "${YELLOW}Starting interactive shell in Linux container...${NC}"
-        docker-compose -f docker/docker-compose.yml run --rm linux-test
+        docker compose -f docker/docker-compose.yml run --rm linux-test
         ;;
     build)
         echo -e "${YELLOW}Building in Linux container...${NC}"
-        docker-compose -f docker/docker-compose.yml run --rm linux-test zig build --cache-dir /tmp/zig-cache
+        docker compose -f docker/docker-compose.yml run --rm linux-test zig build --cache-dir /tmp/zig-cache
         ;;
     clean)
         echo -e "${YELLOW}Cleaning up Docker resources...${NC}"
-        docker-compose -f docker/docker-compose.yml down -v
+        docker compose -f docker/docker-compose.yml down -v
         docker rmi znotify-linux-test:latest 2>/dev/null || true
         echo -e "${GREEN}Cleanup complete${NC}"
         ;;

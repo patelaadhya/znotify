@@ -35,9 +35,9 @@ Write-Host ""
 Write-Yellow "Building Linux D-Bus testing image..."
 
 if ($CacheArg -eq "") {
-    docker-compose -f docker/docker-compose.yml build linux-test
+    docker compose -f docker/docker-compose.yml build linux-test
 } else {
-    docker-compose -f docker/docker-compose.yml build $CacheArg linux-test
+    docker compose -f docker/docker-compose.yml build $CacheArg linux-test
 }
 
 Write-Host ""

@@ -35,23 +35,23 @@ $Command = if ($args.Count -gt 0) { $args[0] } else { "test" }
 switch ($Command) {
     "test" {
         Write-Yellow "Running tests in Linux container..."
-        docker-compose -f docker/docker-compose.yml run --rm test
+        docker compose -f docker/docker-compose.yml run --rm test
     }
     "bench" {
         Write-Yellow "Running benchmarks in Linux container..."
-        docker-compose -f docker/docker-compose.yml run --rm bench
+        docker compose -f docker/docker-compose.yml run --rm bench
     }
     "shell" {
         Write-Yellow "Starting interactive shell in Linux container..."
-        docker-compose -f docker/docker-compose.yml run --rm linux-test
+        docker compose -f docker/docker-compose.yml run --rm linux-test
     }
     "build" {
         Write-Yellow "Building in Linux container..."
-        docker-compose -f docker/docker-compose.yml run --rm linux-test zig build --cache-dir /tmp/zig-cache
+        docker compose -f docker/docker-compose.yml run --rm linux-test zig build --cache-dir /tmp/zig-cache
     }
     "clean" {
         Write-Yellow "Cleaning up Docker resources..."
-        docker-compose -f docker/docker-compose.yml down -v
+        docker compose -f docker/docker-compose.yml down -v
         docker rmi znotify-linux-test:latest 2>$null
         Write-Green "Cleanup complete"
     }

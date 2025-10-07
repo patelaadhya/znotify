@@ -30,7 +30,7 @@ fi
 # Build Linux testing image
 echo ""
 echo -e "${YELLOW}Building Linux D-Bus testing image...${NC}"
-docker-compose -f docker/docker-compose.yml build $CACHE_ARG linux-test
+docker compose -f docker/docker-compose.yml build $CACHE_ARG linux-test
 
 echo ""
 echo -e "${GREEN}Build complete!${NC}"
