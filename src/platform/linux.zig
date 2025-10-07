@@ -177,6 +177,90 @@ pub const LinuxBackend = struct {
 
         // Send BEGIN
         _ = try conn.write("BEGIN\r\n");
+
+        // After authentication, we must call Hello() to get a unique name
+        try self.sendHello();
+    }
+
+    /// Send Hello() message to D-Bus to establish connection and get unique name.
+    /// This must be called after authentication and before any other D-Bus method calls.
+    fn sendHello(self: *LinuxBackend) !void {
+        const conn = self.connection orelse return error.NoConnection;
+
+        var msg: std.ArrayList(u8) = .{};
+        try msg.ensureTotalCapacity(self.allocator, 512);
+        defer msg.deinit(self.allocator);
+
+        // Build Hello() METHOD_CALL message
+        const serial = self.serial;
+        self.serial += 1;
+
+        // Endianness
+        try msg.append(self.allocator, 'l');
+        // Message type (METHOD_CALL)
+        try msg.append(self.allocator, 1);
+        // Flags
+        try msg.append(self.allocator, 0);
+        // Protocol version
+        try msg.append(self.allocator, 1);
+
+        // Body length (Hello has no parameters)
+        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+
+        // Serial
+        try msg.writer(self.allocator).writeInt(u32, serial, .little);
+
+        // Build header fields
+        var header_fields: std.ArrayList(u8) = .{};
+        try header_fields.ensureTotalCapacity(self.allocator, 256);
+        defer header_fields.deinit(self.allocator);
+
+        // PATH
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 1);
+        try appendSignature(&header_fields, self.allocator, "o");
+        try appendObjectPath(&header_fields, self.allocator, "/org/freedesktop/DBus");
+
+        // INTERFACE
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 2);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.DBus");
+
+        // MEMBER
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 3);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "Hello");
+
+        // DESTINATION
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 6);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.DBus");
+
+        // Write header fields
+        try msg.writer(self.allocator).writeInt(u32, @intCast(header_fields.items.len), .little);
+        try msg.appendSlice(self.allocator, header_fields.items);
+
+        // Pad to 8-byte boundary (no body for Hello)
+        while (msg.items.len % 8 != 0) {
+            try msg.append(self.allocator, 0);
+        }
+
+        // Send message
+        _ = try conn.write(msg.items);
+
+        // Read and discard reply (we don't need the unique name)
+        _ = try self.readNotifyReply();
     }
 
     /// Send notification via D-Bus to org.freedesktop.Notifications.Notify.
@@ -248,26 +332,42 @@ pub const LinuxBackend = struct {
         defer header_fields.deinit(self.allocator);
 
         // Field 1: PATH (object path)
+        // Each header field struct must be 8-byte aligned
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
         try header_fields.append(self.allocator, 1); // OBJECT_PATH
         try appendSignature(&header_fields, self.allocator, "o");
         try appendObjectPath(&header_fields, self.allocator, "/org/freedesktop/Notifications");
 
         // Field 2: INTERFACE
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
         try header_fields.append(self.allocator, 2); // INTERFACE
         try appendSignature(&header_fields, self.allocator, "s");
         try appendString(&header_fields, self.allocator, "org.freedesktop.Notifications");
 
         // Field 3: MEMBER (method name)
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
         try header_fields.append(self.allocator, 3); // MEMBER
         try appendSignature(&header_fields, self.allocator, "s");
         try appendString(&header_fields, self.allocator, "Notify");
 
         // Field 6: DESTINATION
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
         try header_fields.append(self.allocator, 6); // DESTINATION
         try appendSignature(&header_fields, self.allocator, "s");
         try appendString(&header_fields, self.allocator, "org.freedesktop.Notifications");
 
         // Field 8: SIGNATURE
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
         try header_fields.append(self.allocator, 8); // SIGNATURE
         try appendSignature(&header_fields, self.allocator, "g");
         try appendSignature(&header_fields, self.allocator, "susssasa{sv}i");
@@ -284,13 +384,22 @@ pub const LinuxBackend = struct {
         const body_start = msg.items.len;
 
         // Build message body: Notify(susssasa{sv}i)
-        // s: app_name
+        // s: app_name (strings need 4-byte alignment for their length field)
+        while (msg.items.len % 4 != 0) {
+            try msg.append(self.allocator, 0);
+        }
         try appendString(&msg, self.allocator, notif.app_name);
 
-        // u: replaces_id
+        // u: replaces_id (u32 needs 4-byte alignment)
+        while (msg.items.len % 4 != 0) {
+            try msg.append(self.allocator, 0);
+        }
         try msg.writer(self.allocator).writeInt(u32, notif.replace_id orelse 0, .little);
 
         // s: app_icon
+        while (msg.items.len % 4 != 0) {
+            try msg.append(self.allocator, 0);
+        }
         const icon_str = switch (notif.icon) {
             .none => "",
             .builtin => |b| @tagName(b),
@@ -300,15 +409,29 @@ pub const LinuxBackend = struct {
         try appendString(&msg, self.allocator, icon_str);
 
         // s: summary (title)
+        while (msg.items.len % 4 != 0) {
+            try msg.append(self.allocator, 0);
+        }
         try appendString(&msg, self.allocator, notif.title);
 
         // s: body (message)
+        while (msg.items.len % 4 != 0) {
+            try msg.append(self.allocator, 0);
+        }
         try appendString(&msg, self.allocator, notif.message);
 
         // as: actions (empty array)
+        // Arrays must be 4-byte aligned before writing length
+        while (msg.items.len % 4 != 0) {
+            try msg.append(self.allocator, 0);
+        }
         try msg.writer(self.allocator).writeInt(u32, 0, .little);
 
-        // a{sv}: hints
+        // a{sv}: hints (empty dict)
+        // Dict entries are 8-byte aligned, but empty array just needs 4-byte alignment for length
+        while (msg.items.len % 4 != 0) {
+            try msg.append(self.allocator, 0);
+        }
         try msg.writer(self.allocator).writeInt(u32, 0, .little);
 
         // i: expire_timeout
@@ -404,6 +527,17 @@ pub const LinuxBackend = struct {
         _ = try conn.write(msg.items);
     }
 
+    /// Helper to read exact number of bytes from connection.
+    /// Loops until all bytes are read or connection is closed.
+    fn readExact(conn: net.Stream, buffer: []u8) !void {
+        var total_read: usize = 0;
+        while (total_read < buffer.len) {
+            const n = try conn.read(buffer[total_read..]);
+            if (n == 0) return error.ConnectionClosed;
+            total_read += n;
+        }
+    }
+
     /// Read and parse D-Bus METHOD_RETURN message to extract notification ID.
     ///
     /// D-Bus reply message structure:
@@ -416,58 +550,86 @@ pub const LinuxBackend = struct {
     fn readNotifyReply(self: *LinuxBackend) !u32 {
         const conn = self.connection orelse return error.NoConnection;
 
-        var header: [16]u8 = undefined;
-        const n = try conn.read(&header);
-        if (n < 16) return error.InvalidReply;
+        // Loop to handle multiple messages (signals, etc.) until we get METHOD_RETURN
+        while (true) {
+            var header: [16]u8 = undefined;
+            try readExact(conn, &header);
 
-        // Parse header
-        const endian = header[0];
-        if (endian != 'l') return error.UnsupportedEndianness;
+            // Parse header
+            const endian = header[0];
+            if (endian != 'l') return error.UnsupportedEndianness;
 
-        const msg_type = header[1];
-        if (msg_type != 2) return error.NotMethodReturn; // 2 = METHOD_RETURN
+            const msg_type = header[1];
+            const body_len = std.mem.readInt(u32, header[4..8], .little);
+            const header_fields_len = std.mem.readInt(u32, header[12..16], .little);
 
-        const body_len = std.mem.readInt(u32, header[4..8], .little);
-        const serial = std.mem.readInt(u32, header[8..12], .little);
-        _ = serial;
+            // If this is not a METHOD_RETURN, skip the entire message
+            if (msg_type != 2) { // 2 = METHOD_RETURN
+                // Skip header fields
+                var skip_buf: [1024]u8 = undefined;
+                var remaining = header_fields_len;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    try readExact(conn, skip_buf[0..to_read]);
+                    remaining -= to_read;
+                }
 
-        const header_fields_len = std.mem.readInt(u32, header[12..16], .little);
+                // Skip padding to 8-byte boundary
+                const total_header_len = 16 + header_fields_len;
+                const padding = (8 - (total_header_len % 8)) % 8;
+                if (padding > 0) {
+                    try readExact(conn, skip_buf[0..padding]);
+                }
 
-        // Skip header fields
-        var skip_buf: [1024]u8 = undefined;
-        var remaining = header_fields_len;
-        while (remaining > 0) {
-            const to_read = @min(remaining, skip_buf.len);
-            const read = try conn.read(skip_buf[0..to_read]);
-            remaining -= @intCast(read);
-        }
+                // Skip body
+                remaining = body_len;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    try readExact(conn, skip_buf[0..to_read]);
+                    remaining -= to_read;
+                }
 
-        // Skip padding to 8-byte boundary
-        const total_header_len = 16 + header_fields_len;
-        const padding = (8 - (total_header_len % 8)) % 8;
-        if (padding > 0) {
-            _ = try conn.read(skip_buf[0..padding]);
-        }
+                // Continue to next message
+                continue;
+            }
 
-        // Read body (should be UINT32)
-        if (body_len < 4) return error.InvalidReplyBody;
-
-        var body: [4]u8 = undefined;
-        _ = try conn.read(&body);
-
-        const notif_id = std.mem.readInt(u32, &body, .little);
-
-        // Consume any remaining body
-        if (body_len > 4) {
-            remaining = body_len - 4;
+            // This is a METHOD_RETURN, process it
+            // Skip header fields
+            var skip_buf: [1024]u8 = undefined;
+            var remaining = header_fields_len;
             while (remaining > 0) {
                 const to_read = @min(remaining, skip_buf.len);
-                const read = try conn.read(skip_buf[0..to_read]);
-                remaining -= @intCast(read);
+                try readExact(conn, skip_buf[0..to_read]);
+                remaining -= to_read;
             }
-        }
 
-        return notif_id;
+            // Skip padding to 8-byte boundary
+            const total_header_len = 16 + header_fields_len;
+            const padding = (8 - (total_header_len % 8)) % 8;
+            if (padding > 0) {
+                try readExact(conn, skip_buf[0..padding]);
+            }
+
+            // Read body (should be UINT32)
+            if (body_len < 4) return error.InvalidReplyBody;
+
+            var body: [4]u8 = undefined;
+            try readExact(conn, &body);
+
+            const notif_id = std.mem.readInt(u32, &body, .little);
+
+            // Consume any remaining body
+            if (body_len > 4) {
+                remaining = body_len - 4;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    try readExact(conn, skip_buf[0..to_read]);
+                    remaining -= to_read;
+                }
+            }
+
+            return notif_id;
+        }
     }
 
     /// Close/dismiss a notification by ID via D-Bus CloseNotification method.
