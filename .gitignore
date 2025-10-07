@@ -1,2 +1,6 @@
 # Claude AI files
 .claude/
+
+# Zig build artifacts
+.zig-cache/
+zig-out/
