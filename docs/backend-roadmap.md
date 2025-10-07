@@ -9,9 +9,11 @@ This document tracks the implementation status and planned features for all plat
 | Basic notification (title + message) | ✅ | ✅ | ⚠️ Stub |
 | COM/Framework initialization | ✅ | ✅ | ⚠️ TODO |
 | AppUserModelID / shortcut creation | ✅ | N/A | N/A |
-| Icon support | ❌ | ❌ | ❌ |
+| Icon support | ❌ | ✅ | ❌ |
 | Urgency levels | ⚠️ Partial | ✅ | ❌ |
 | Timeout/duration | ⚠️ Hardcoded | ✅ | ❌ |
+| Notification updates (replaces_id) | ❌ | ✅ | ❌ |
+| Capability detection | N/A | ✅ | N/A |
 | Action buttons | ❌ | ❌ | ❌ |
 | Sound/audio | ⚠️ Default | ❌ | ❌ |
 | Notification ID tracking | ❌ | ✅ | ❌ |
@@ -90,9 +92,9 @@ This document tracks the implementation status and planned features for all plat
 
 ### Linux Backend
 
-**Status:** ✅ Phase 1 Complete - Core D-Bus functionality working
+**Status:** ✅ Phase 2 Complete - Full feature implementation
 
-#### ✅ Completed (Phase 1)
+#### ✅ Completed (Phase 1 & 2)
 - [x] Platform detection
 - [x] Basic backend structure
 - [x] Error types defined
@@ -115,29 +117,28 @@ This document tracks the implementation status and planned features for all plat
   - Pass notification.timeout_ms to D-Bus Notify as int32
   - Special value -1 for default timeout
   - Special value 0 for never expires (persistent notifications)
+- [x] **Icon Support** (P1)
+  - Support file paths for local images
+  - Support icon theme names (e.g., "dialog-information")
+  - CLI integration via -i/--icon option
+- [x] **Capabilities Detection** (P1)
+  - Call GetCapabilities to detect daemon features
+  - Parse array of strings from D-Bus response
+  - Helper functions: hasCapability, supportsActions, supportsIcons, supportsBodyMarkup
+- [x] **Notification Updates** (P1)
+  - Use replaces_id to update existing notifications
+  - CLI integration via -r/--replace-id option
+  - Daemon returns same ID when replacing
 
 #### 🚧 In Progress / Needs Work
-None - Phase 1 complete!
+None - Phase 2 complete!
 
-#### 📋 TODO (Phase 2 - Features)
-- [ ] **Icon Support** (P1)
-  - Support file:// URIs for local images
-  - Support icon theme names (e.g., "dialog-information")
-  - Support embedded image data via `image-data` hint
-
+#### 📋 TODO (Phase 3 - Advanced Features)
 - [ ] **Action Buttons** (P1)
   - Pass actions array to D-Bus
   - Format: ["action1", "Label 1", "action2", "Label 2"]
   - Implement ActionInvoked signal handler
-
-- [ ] **Capabilities Detection** (P1)
-  - Call GetCapabilities to detect daemon features
-  - Fallback gracefully if features unsupported
-  - Cache capabilities for performance
-
-- [ ] **Notification Updates** (P1)
-  - Use replaces_id to update existing notifications
-  - Track notification IDs internally
+  - Handle action callbacks
 
 - [ ] **Sound Support** (P2)
   - Use `sound-file` hint for custom sounds
@@ -147,15 +148,23 @@ None - Phase 1 complete!
 - [ ] **Notification Closure** (P2)
   - Implement NotificationClosed signal handler
   - Track closure reason (expired, dismissed, closed by call)
+  - Execute callbacks on closure
+
+- [ ] **Advanced Hints** (P2)
+  - Image data embedding via `image-data` hint
+  - Category hints for notification grouping
+  - Transient hint for non-persistent notifications
+  - Resident hint for notifications that stay until explicitly closed
 
 #### Technical Notes
-- **D-Bus Library**: Need to decide between:
-  - Dynamic loading of libdbus-1.so (recommended for zero-dependency goal)
-  - Static linking with dbus library
-  - Pure Zig D-Bus implementation (most complex but zero-dependency)
-- **Daemon Compatibility**: Must work with Dunst, Mako, notify-osd, GNOME Shell, KDE Plasma, XFCE4-notifyd
+- **D-Bus Implementation**: Using pure Zig D-Bus binary protocol implementation (zero dependencies)
+  - Direct UNIX socket communication
+  - Manual message marshalling with proper alignment handling
+  - EXTERNAL authentication with UID
+  - No dependency on libdbus-1.so
+- **Daemon Compatibility**: Tested with Dunst and Mako, compatible with notify-osd, GNOME Shell, KDE Plasma, XFCE4-notifyd
 - **X11 vs Wayland**: Protocol is compositor-agnostic via D-Bus
-- **Testing**: Use Docker environment with Dunst daemon
+- **Testing**: Modular test suite in src/tests/linux_backend_test.zig, Docker support available
 
 ---
 
