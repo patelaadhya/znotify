@@ -230,7 +230,7 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs:
   - Configurable timeout handling
 
 ### Linux
-- **Status**: ✅ **PHASE 2 COMPLETE** - Full feature implementation
+- **Status**: ✅ **PHASE 3 COMPLETE** - ActionInvoked signal handler implemented
 - Primary: D-Bus interface to notification daemon
 - Protocol: `org.freedesktop.Notifications` specification
 - Implementation: Pure Zig D-Bus binary protocol (zero dependencies)
@@ -246,11 +246,15 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs:
   - Notification updates via replaces_id (-r/--replace-id option)
   - GetCapabilities D-Bus method with capability checking helpers
   - Action buttons (--action <id> <label> CLI option, repeatable)
+  - ActionInvoked signal handler with --wait mode (blocks until action clicked)
   - Modular test suite with comprehensive coverage
 - Compatible with: GNOME, KDE, Dunst, Mako, notify-osd, XFCE4-notifyd
 - **Note on Action Buttons**: Mako daemon uses CLI-based action invocation (`makoctl invoke`/`makoctl menu`) rather than visual buttons. GNOME, KDE, and Dunst show visual buttons.
-- **TODO (Phase 3)**:
-  - ActionInvoked signal handler for callbacks
+- **Wait Mode Usage**:
+  - `znotify "Title" "Message" --action "yes" "Yes" --action "no" "No" --wait` blocks until user clicks an action
+  - `--wait-timeout=5000` waits max 5 seconds before timing out (returns exit code 1)
+  - Prints the action key when clicked: `Action invoked: yes`
+- **TODO (Phase 4)**:
   - Sound hints (sound-file, sound-name, suppress-sound)
   - Notification closure tracking (NotificationClosed signal)
 - See `docs/backend-roadmap.md` for full implementation plan

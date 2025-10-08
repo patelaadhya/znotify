@@ -36,10 +36,12 @@ Currently implemented:
   - Notification updates via replaces_id (-r option)
   - Capability detection (GetCapabilities with helper functions)
   - Action buttons (--action option, with daemon-specific behavior)
+  - ActionInvoked signal handler with --wait mode (blocks until user clicks action)
+  - Wait timeout support (--wait-timeout in milliseconds)
   - Compatible with all notification daemons (Dunst, Mako, notify-osd, GNOME, KDE, XFCE)
+  - **Note**: Dunst required for visual action buttons; Mako uses CLI-based invocation
 
 Coming soon:
-- ActionInvoked signal handler for callbacks (Linux)
 - Sound hints (Linux)
 - macOS notifications (UserNotifications framework)
 - Configuration file support
@@ -100,7 +102,7 @@ Test Linux D-Bus functionality on any platform:
 
 See [docker/README.md](docker/README.md) for details.
 
-## Usage (Planned)
+## Usage
 
 ```bash
 # Basic notification
@@ -114,6 +116,14 @@ znotify "Update Available" "Click to install" -i software-update
 
 # Custom timeout
 znotify "Auto-save" "Changes saved" -t 2000
+
+# Action buttons with wait mode (Linux with Dunst)
+znotify "Confirm" "Delete file?" \
+  --action "yes" "Yes" \
+  --action "no" "No" \
+  --wait \
+  --wait-timeout=30000
+# Blocks until user clicks, prints: "Action invoked: yes"
 
 # notify-send compatibility mode
 znotify --compat -u low -i dialog-information "Info" "Operation complete"

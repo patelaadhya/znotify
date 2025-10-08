@@ -8,9 +8,9 @@ const errors = @import("../errors.zig");
 /// operating systems using a vtable pattern for runtime polymorphism.
 ///
 /// Each platform implements its own backend that conforms to this interface:
-/// - Linux: D-Bus protocol via org.freedesktop.Notifications
-/// - Windows: WinRT Toast API (future implementation)
-/// - macOS: UserNotifications framework (future implementation)
+/// - Linux: D-Bus protocol via org.freedesktop.Notifications (full implementation with action signals)
+/// - Windows: WinRT Toast API with COM integration (implemented)
+/// - macOS: UserNotifications framework (stub implementation)
 pub const Backend = struct {
     /// Opaque pointer to the platform-specific backend implementation
     ptr: *anyopaque,
@@ -109,10 +109,10 @@ pub const Platform = enum {
 /// Automatically detects the platform and instantiates the correct backend.
 ///
 /// Returns:
-/// - Windows: WindowsBackend (WinRT Toast API stub)
-/// - Linux: LinuxBackend (D-Bus notifications via org.freedesktop.Notifications)
+/// - Windows: WindowsBackend (WinRT Toast API with PowerShell bridge)
+/// - Linux: LinuxBackend (D-Bus with action buttons, signals, icons, urgency levels)
 /// - macOS: MacOSBackend (UserNotifications framework stub)
-/// - FreeBSD: LinuxBackend (Linux compatibility layer)
+/// - FreeBSD: LinuxBackend (via Linux compatibility layer)
 /// - Unknown: PlatformNotSupported error
 pub fn createPlatformBackend(allocator: std.mem.Allocator) !Backend {
     const platform = Platform.detect();
@@ -126,7 +126,8 @@ pub fn createPlatformBackend(allocator: std.mem.Allocator) !Backend {
     };
 }
 
-/// Create Windows-specific notification backend.
+/// Create Windows-specific notification backend using WinRT Toast API.
+/// Supports toast notifications with title, message, urgency mapping, and Action Center.
 /// Returns PlatformNotSupported if not compiled for Windows.
 fn createWindowsBackend(allocator: std.mem.Allocator) !Backend {
     if (@import("builtin").os.tag != .windows) {
@@ -136,7 +137,9 @@ fn createWindowsBackend(allocator: std.mem.Allocator) !Backend {
     return windows.createBackend(allocator);
 }
 
-/// Create Linux-specific notification backend using D-Bus.
+/// Create Linux-specific notification backend using D-Bus binary protocol.
+/// Supports notifications, urgency levels, icons, action buttons, and ActionInvoked signals.
+/// Compatible with Dunst, Mako, GNOME, KDE, and other freedesktop.org notification daemons.
 /// Returns PlatformNotSupported if not compiled for Linux or FreeBSD.
 fn createLinuxBackend(allocator: std.mem.Allocator) !Backend {
     if (@import("builtin").os.tag != .linux and @import("builtin").os.tag != .freebsd) {
@@ -146,7 +149,8 @@ fn createLinuxBackend(allocator: std.mem.Allocator) !Backend {
     return linux.createBackend(allocator);
 }
 
-/// Create macOS-specific notification backend.
+/// Create macOS-specific notification backend using UserNotifications framework.
+/// Currently a stub implementation - macOS support is planned for future release.
 /// Returns PlatformNotSupported if not compiled for macOS.
 fn createMacOSBackend(allocator: std.mem.Allocator) !Backend {
     if (@import("builtin").os.tag != .macos) {

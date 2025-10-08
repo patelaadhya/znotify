@@ -135,15 +135,23 @@ This document tracks the implementation status and planned features for all plat
   - CLI integration via --action <id> <label> option (repeatable)
   - Test coverage with capability detection
   - Note: Mako daemon uses CLI-based invocation (`makoctl invoke`/`makoctl menu`) rather than visual buttons; GNOME/KDE/Dunst show visual buttons
+- [x] **ActionInvoked Signal Handler** (P2)
+  - Subscribe to ActionInvoked D-Bus signals using AddMatch
+  - Parse signal messages to extract notification ID and action key
+  - Filter signals by interface and member (skip NameAcquired, NameLost, etc.)
+  - Use same D-Bus connection for sending and receiving (Dunst requirement)
+  - CLI integration via --wait flag (blocks until action is invoked)
+  - Test coverage with automated signal sending
+- [x] **Wait Timeout Implementation** (P2)
+  - Implement timeout support using poll() for non-blocking waits
+  - CLI integration via --wait-timeout=<ms> option
+  - Returns error.Timeout when no action clicked within timeout period
+  - Supports infinite wait (0 or omitted timeout)
 
 #### 🚧 In Progress / Needs Work
-None - Phase 2 complete!
+None - Phase 3 complete!
 
-#### 📋 TODO (Phase 3 - Advanced Features)
-- [ ] **ActionInvoked Signal Handler** (P2)
-  - Listen for ActionInvoked D-Bus signals
-  - Execute callbacks when actions are clicked
-  - Integrate with --wait mode for synchronous operation
+#### 📋 TODO (Phase 4 - Advanced Features)
 
 - [ ] **Sound Support** (P2)
   - Use `sound-file` hint for custom sounds

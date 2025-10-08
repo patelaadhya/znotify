@@ -22,6 +22,18 @@ const fs = std.fs;
 /// - Authenticates using EXTERNAL mechanism (UID-based)
 /// - Sends notifications via D-Bus binary protocol
 /// - Parses METHOD_RETURN messages to get notification IDs
+
+/// Result of ActionInvoked signal - returned when user clicks an action button.
+pub const ActionInvokedSignal = struct {
+    notification_id: u32,
+    action_key: []const u8,
+
+    /// Free the allocated action_key string.
+    pub fn deinit(self: *ActionInvokedSignal, allocator: std.mem.Allocator) void {
+        allocator.free(self.action_key);
+    }
+};
+
 pub const LinuxBackend = struct {
     allocator: std.mem.Allocator,
     /// Active D-Bus connection, null if connection failed
@@ -940,6 +952,305 @@ pub const LinuxBackend = struct {
     /// Check if D-Bus connection was successfully established.
     pub fn isAvailable(self: *LinuxBackend) bool {
         return self.available;
+    }
+
+    /// Subscribe to ActionInvoked signals from the notification daemon.
+    /// Must be called before waitForActionInvokedSignal().
+    pub fn addMatchRule(self: *LinuxBackend) !void {
+        const conn = self.connection orelse return error.NoConnection;
+
+        var msg: std.ArrayList(u8) = .{};
+        try msg.ensureTotalCapacity(self.allocator, 512);
+        defer msg.deinit(self.allocator);
+
+        // Build AddMatch METHOD_CALL message
+        const serial = self.serial;
+        self.serial += 1;
+
+        // Endianness
+        try msg.append(self.allocator, 'l');
+        // Message type (METHOD_CALL)
+        try msg.append(self.allocator, 1);
+        // Flags
+        try msg.append(self.allocator, 0);
+        // Protocol version
+        try msg.append(self.allocator, 1);
+
+        // Match rule string
+        const match_rule = "type='signal',interface='org.freedesktop.Notifications',member='ActionInvoked'";
+
+        // Body length (string: 4 bytes length + string + NUL)
+        const body_len: u32 = @intCast(4 + match_rule.len + 1);
+        try msg.writer(self.allocator).writeInt(u32, body_len, .little);
+
+        // Serial
+        try msg.writer(self.allocator).writeInt(u32, serial, .little);
+
+        // Build header fields
+        var header_fields: std.ArrayList(u8) = .{};
+        try header_fields.ensureTotalCapacity(self.allocator, 256);
+        defer header_fields.deinit(self.allocator);
+
+        // PATH
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 1);
+        try appendSignature(&header_fields, self.allocator, "o");
+        try appendObjectPath(&header_fields, self.allocator, "/org/freedesktop/DBus");
+
+        // INTERFACE
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 2);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.DBus");
+
+        // MEMBER
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 3);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "AddMatch");
+
+        // DESTINATION
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 6);
+        try appendSignature(&header_fields, self.allocator, "s");
+        try appendString(&header_fields, self.allocator, "org.freedesktop.DBus");
+
+        // SIGNATURE (body signature is "s" - one string argument)
+        while (header_fields.items.len % 8 != 0) {
+            try header_fields.append(self.allocator, 0);
+        }
+        try header_fields.append(self.allocator, 8);
+        try appendSignature(&header_fields, self.allocator, "g"); // signature field type is 'g'
+        try appendSignature(&header_fields, self.allocator, "s"); // body signature is 's'
+
+        // Write header fields
+        try msg.writer(self.allocator).writeInt(u32, @intCast(header_fields.items.len), .little);
+        try msg.appendSlice(self.allocator, header_fields.items);
+
+        // Pad to 8-byte boundary before body
+        while (msg.items.len % 8 != 0) {
+            try msg.append(self.allocator, 0);
+        }
+
+        // Body: match rule string
+        try appendString(&msg, self.allocator, match_rule);
+
+        // Send message (don't wait for reply - it will be read in the message loop)
+        _ = try conn.write(msg.items);
+    }
+
+    /// Wait for and parse ActionInvoked signal from notification daemon.
+    /// Returns notification ID and action key when an action button is clicked.
+    /// Blocks until a signal is received or timeout occurs.
+    /// Timeout of 0 means wait indefinitely.
+    pub fn waitForActionInvokedSignal(
+        self: *LinuxBackend,
+        allocator: std.mem.Allocator,
+        target_notif_id: u32,
+        timeout_ms: u32,
+    ) !ActionInvokedSignal {
+        const conn = self.connection orelse return error.NoConnection;
+
+        // Convert timeout: 0 = infinite (-1 for poll), >0 = milliseconds
+        const poll_timeout: i32 = if (timeout_ms == 0) -1 else @intCast(timeout_ms);
+
+        // Loop waiting for ActionInvoked signal
+        while (true) {
+            // Check if data is available with timeout
+            var poll_fd = [_]std.posix.pollfd{.{
+                .fd = conn.handle,
+                .events = std.posix.POLL.IN,
+                .revents = 0,
+            }};
+
+            const ready = try std.posix.poll(&poll_fd, poll_timeout);
+            if (ready == 0) {
+                return error.Timeout;
+            }
+
+            var header: [16]u8 = undefined;
+            try readExact(conn, &header);
+
+            // Parse header
+            const endian = header[0];
+            if (endian != 'l') return error.UnsupportedEndianness;
+
+            const msg_type = header[1];
+            const body_len = std.mem.readInt(u32, header[4..8], .little);
+            const header_fields_len = std.mem.readInt(u32, header[12..16], .little);
+
+
+            // If this is not a SIGNAL (type 4), skip it
+            if (msg_type != 4) {
+                // Skip header fields
+                var skip_buf: [1024]u8 = undefined;
+                var remaining = header_fields_len;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    try readExact(conn, skip_buf[0..to_read]);
+                    remaining -= to_read;
+                }
+
+                // Skip padding
+                const total_header_len = 16 + header_fields_len;
+                const padding = (8 - (total_header_len % 8)) % 8;
+                if (padding > 0) {
+                    try readExact(conn, skip_buf[0..padding]);
+                }
+
+                // Skip body
+                remaining = body_len;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    try readExact(conn, skip_buf[0..to_read]);
+                    remaining -= to_read;
+                }
+
+                continue;
+            }
+
+            // This is a SIGNAL - parse header fields to check if it's ActionInvoked
+
+            // Read header fields to check interface and member
+            var header_fields_buf = try allocator.alloc(u8, header_fields_len);
+            defer allocator.free(header_fields_buf);
+            try readExact(conn, header_fields_buf);
+
+            // Parse header fields to find INTERFACE (2) and MEMBER (3)
+            var interface: ?[]const u8 = null;
+            var member: ?[]const u8 = null;
+            var offset: usize = 0;
+
+            while (offset < header_fields_len) {
+
+                if (offset + 8 > header_fields_len) {
+                    break;
+                }
+
+                // Align to 8-byte boundary
+                offset = std.mem.alignForward(usize, offset, 8);
+
+                if (offset >= header_fields_len) {
+                    break;
+                }
+
+                const field_code = header_fields_buf[offset];
+                offset += 1;
+
+                // Field signature (1 byte type code for our simple cases)
+                if (offset >= header_fields_len) break;
+                const sig_len = header_fields_buf[offset];
+                offset += 1;
+                offset += sig_len + 1; // Skip signature + NUL
+
+                // Field 8 (SIGNATURE) uses 1-byte length, others use 4-byte length
+                const str_len: u32 = if (field_code == 8) blk: {
+                    // Signature field: 1-byte length
+                    if (offset >= header_fields_len) break;
+                    const len = header_fields_buf[offset];
+                    offset += 1;
+                    break :blk len;
+                } else blk: {
+                    // Other fields: 4-byte length with alignment
+                    offset = std.mem.alignForward(usize, offset, 4);
+                    if (offset + 4 > header_fields_len) break;
+                    const len = std.mem.readInt(u32, header_fields_buf[offset..][0..4], .little);
+                    offset += 4;
+                    break :blk len;
+                };
+
+                if (offset + str_len >= header_fields_len) {
+                    break;
+                }
+                const str_value = header_fields_buf[offset .. offset + str_len];
+                offset += str_len + 1; // +1 for NUL terminator
+
+                if (field_code == 2) { // INTERFACE
+                    interface = str_value;
+                } else if (field_code == 3) { // MEMBER
+                    member = str_value;
+                }
+            }
+
+            // Check if this is the ActionInvoked signal we're looking for
+            const is_action_invoked = blk: {
+                if (interface == null or member == null) break :blk false;
+                if (!std.mem.eql(u8, interface.?, "org.freedesktop.Notifications")) break :blk false;
+                if (!std.mem.eql(u8, member.?, "ActionInvoked")) break :blk false;
+                break :blk true;
+            };
+
+            if (!is_action_invoked) {
+                // Skip padding to 8-byte boundary
+                const total_header_len = 16 + header_fields_len;
+                const padding = (8 - (total_header_len % 8)) % 8;
+                if (padding > 0) {
+                    var pad_buf: [8]u8 = undefined;
+                    try readExact(conn, pad_buf[0..padding]);
+                }
+
+                // Skip body
+                var skip_buf: [1024]u8 = undefined;
+                var remaining = body_len;
+                while (remaining > 0) {
+                    const to_read = @min(remaining, skip_buf.len);
+                    const n = try conn.read(skip_buf[0..to_read]);
+                    if (n == 0) return error.ConnectionClosed;
+                    remaining -= @intCast(n);
+                }
+                continue;
+            }
+
+            // Skip padding to 8-byte boundary
+            const total_header_len = 16 + header_fields_len;
+            const padding = (8 - (total_header_len % 8)) % 8;
+            if (padding > 0) {
+                var pad_buf: [8]u8 = undefined;
+                try readExact(conn, pad_buf[0..padding]);
+            }
+
+            // Read body: uint32 notification_id + string action_key
+            // Body format: uint32 (4 bytes) + uint32 string_len + string + NUL
+            if (body_len < 8) return error.InvalidSignalBody;
+
+            // Read notification ID (uint32)
+            var id_buf: [4]u8 = undefined;
+            try readExact(conn, &id_buf);
+            const notif_id = std.mem.readInt(u32, &id_buf, .little);
+
+            // Read action key string length
+            var str_len_buf: [4]u8 = undefined;
+            try readExact(conn, &str_len_buf);
+            const str_len = std.mem.readInt(u32, &str_len_buf, .little);
+
+            // Read action key string
+            const action_key = try allocator.alloc(u8, str_len);
+            errdefer allocator.free(action_key);
+            try readExact(conn, @constCast(action_key));
+
+            // Read NUL terminator
+            var nul: [1]u8 = undefined;
+            try readExact(conn, &nul);
+
+            // If this signal is for our notification, return it
+            if (notif_id == target_notif_id) {
+                return ActionInvokedSignal{
+                    .notification_id = notif_id,
+                    .action_key = action_key,
+                };
+            }
+
+            // Wrong notification, free string and continue
+            allocator.free(action_key);
+        }
     }
 
     /// VTable implementation for Linux backend.

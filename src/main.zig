@@ -105,7 +105,33 @@ pub fn main() !void {
     const id = try platform_backend.send(notif);
     std.debug.print("Notification sent with ID: {}\n", .{id});
 
-    const caps = try platform_backend.getCapabilities(allocator);
-    defer allocator.free(caps);
-    std.debug.print("Backend capabilities: {s}\n", .{caps});
+    // If wait mode is enabled and we have actions, subscribe and wait for signal
+    if (config.wait and config.actions.items.len > 0) {
+        const builtin = @import("builtin");
+        if (builtin.os.tag == .linux) {
+            const linux = @import("platform/linux.zig");
+
+            // Use the same backend connection that sent the notification
+            // (Dunst sends ActionInvoked to the client that sent the notification)
+            const linux_backend = @as(*linux.LinuxBackend, @alignCast(@ptrCast(platform_backend.ptr)));
+
+            // Subscribe to ActionInvoked signals on this connection
+            try linux_backend.addMatchRule();
+
+            // Wait for action signal (timeout in milliseconds, 0 = infinite)
+            const timeout_ms: u32 = config.wait_timeout orelse 0;
+            var signal = linux_backend.waitForActionInvokedSignal(allocator, id, timeout_ms) catch |err| {
+                if (err == error.Timeout) {
+                    std.debug.print("Timeout waiting for action\n", .{});
+                    return err;
+                }
+                return err;
+            };
+            defer signal.deinit(allocator);
+
+            std.debug.print("Action invoked: {s}\n", .{signal.action_key});
+        } else {
+            std.debug.print("Wait mode is only supported on Linux\n", .{});
+        }
+    }
 }

@@ -27,6 +27,7 @@ pub const Config = struct {
     // Behavior flags
     print_id: bool = false,
     wait: bool = false,
+    wait_timeout: ?u32 = null, // Timeout in milliseconds for --wait mode (null = infinite)
     no_sound: bool = false,
     dry_run: bool = false,
     debug: bool = build_options.enable_debug,
@@ -152,6 +153,9 @@ pub const ArgParser = struct {
             self.config.print_id = true;
         } else if (std.mem.eql(u8, option, "wait")) {
             self.config.wait = true;
+        } else if (std.mem.startsWith(u8, option, "wait-timeout=")) {
+            const value = option["wait-timeout=".len..];
+            self.config.wait_timeout = try std.fmt.parseInt(u32, value, 10);
         } else if (std.mem.eql(u8, option, "no-sound")) {
             self.config.no_sound = true;
         } else if (std.mem.eql(u8, option, "compat")) {
@@ -313,6 +317,7 @@ pub fn printHelp() !void {
         \\        --action <id> <label> Add action button (can be repeated)
         \\    -p, --print-id            Print notification ID to stdout
         \\    -w, --wait                Wait for user interaction
+        \\        --wait-timeout=<ms>   Timeout for wait mode in milliseconds
         \\        --no-sound            Disable notification sound
         \\        --config <file>       Use configuration file
         \\        --dry-run             Validate without sending notification
