@@ -219,7 +219,7 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs:
 - Subsystem: `.Console`
 - **Working Features**:
   - Toast notifications with title and message
-  - Urgency mapping (audio and scenario attributes)
+  - Urgency mapping (duration, audio, and scenario attributes)
   - Action Center persistence
   - XML escaping for safety
 - **TODO**:

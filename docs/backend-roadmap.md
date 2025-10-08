@@ -10,12 +10,12 @@ This document tracks the implementation status and planned features for all plat
 | COM/Framework initialization | ✅ | ✅ | ⚠️ TODO |
 | AppUserModelID / shortcut creation | ✅ | N/A | N/A |
 | Icon support | ❌ | ✅ | ❌ |
-| Urgency levels | ⚠️ Partial | ✅ | ❌ |
+| Urgency levels | ✅ | ✅ | ❌ |
 | Timeout/duration | ⚠️ Hardcoded | ✅ | ❌ |
 | Notification updates (replaces_id) | ❌ | ✅ | ❌ |
 | Capability detection | N/A | ✅ | N/A |
 | Action buttons | ❌ | ✅ | ❌ |
-| Sound/audio | ⚠️ Default | ❌ | ❌ |
+| Sound/audio | ✅ | ❌ | ❌ |
 | Notification ID tracking | ❌ | ✅ | ❌ |
 | Click activation handling | ❌ | ❌ | ❌ |
 | Error handling | ⚠️ Basic | ✅ | ⚠️ Basic |
@@ -38,14 +38,13 @@ This document tracks the implementation status and planned features for all plat
 - [x] Basic notification display (title + message)
 - [x] PowerShell-based toast invocation
 - [x] Default notification sound
+- [x] **Urgency Level Mapping**
+  - Map `Urgency.low` → `duration="short"` (5-10s display)
+  - Map `Urgency.normal` → `duration="long"` (25s display)
+  - Map `Urgency.critical` → `duration="long"` + `scenario="urgent"` (persistent, alarm sound)
+  - Note: Windows 11 may play alarm once instead of looping despite "Looping.Alarm" URI
 
 #### 🚧 In Progress / Needs Work
-- [ ] **Urgency Level Mapping** (P0)
-  - Currently hardcoded to `duration="long"`
-  - Map `Urgency.low` → `duration="short"`
-  - Map `Urgency.normal` → `duration="long"`
-  - Map `Urgency.critical` → `duration="long"` + keep on screen
-
 - [ ] **Timeout Handling** (P0)
   - Respect notification.timeout_ms parameter
   - Map to toast duration and scenario attributes
@@ -62,10 +61,11 @@ This document tracks the implementation status and planned features for all plat
   - Support up to 5 buttons per notification
   - Button click handling via COM activation
 
-- [ ] **Audio Customization** (P2)
-  - Support different notification sounds
-  - Silent notifications option
-  - Map to ms-winsoundevent URIs
+- [x] **Audio Customization - Basic** (P2)
+  - ✅ Urgency-based sounds (default, looping alarm for critical)
+  - ✅ Map to ms-winsoundevent URIs
+  - [ ] TODO: User-customizable sounds (CLI option)
+  - [ ] TODO: Silent notifications option
 
 - [ ] **Shell_NotifyIcon Fallback** (P1)
   - Detect Windows 8.1 and earlier

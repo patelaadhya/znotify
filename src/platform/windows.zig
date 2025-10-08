@@ -355,14 +355,19 @@ pub const WindowsBackend = struct {
 
         try writer.writeAll("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
 
-        // Add duration and scenario attributes to make toast more visible
+        // Map urgency to duration and scenario attributes
+        const duration = switch (notif.urgency) {
+            .low => "short",
+            .normal, .critical => "long",
+        };
         const scenario = switch (notif.urgency) {
             .critical => " scenario=\"urgent\"",
             else => "",
         };
-        try writer.print("<toast duration=\"long\"{s}>", .{scenario});
+        try writer.print("<toast duration=\"{s}\"{s}>", .{ duration, scenario });
 
         // Audio based on urgency
+        // Note: Windows 11 may play Looping.Alarm once instead of looping
         const audio = switch (notif.urgency) {
             .low => "ms-winsoundevent:Notification.Default",
             .normal => "ms-winsoundevent:Notification.Default",

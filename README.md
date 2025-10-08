@@ -25,7 +25,7 @@ Currently implemented:
 - **Windows notifications** (WinRT Toast API with COM integration)
   - Toast notifications with title and message
   - Start Menu shortcut creation with AppUserModelID
-  - Urgency level mapping (audio and scenario)
+  - Urgency level mapping (duration, audio, and scenario attributes)
   - Action Center integration
 - **Linux notifications** (D-Bus implementation)
   - D-Bus binary protocol implementation (zero dependencies)
