@@ -78,6 +78,21 @@ pub const Icon = union(enum) {
     }
 };
 
+/// Action button that can be attached to a notification.
+/// Actions allow users to interact with notifications by clicking buttons or invoking via shortcuts.
+pub const Action = struct {
+    /// Internal action identifier (e.g., "reply", "delete")
+    id: []const u8,
+    /// User-visible label displayed on the button
+    label: []const u8,
+
+    /// Frees any allocated memory used by this action.
+    pub fn deinit(self: *Action, allocator: std.mem.Allocator) void {
+        allocator.free(self.id);
+        allocator.free(self.label);
+    }
+};
+
 /// Reason why a notification was closed.
 /// Used for tracking notification lifecycle events.
 pub const CloseReason = enum {
@@ -113,6 +128,8 @@ pub const Notification = struct {
     app_name: []const u8 = "znotify",
     /// ID of notification to replace (for updates)
     replace_id: ?u32 = null,
+    /// Action buttons for user interaction
+    actions: []const Action = &[_]Action{},
 
     // Platform-specific hints (simplified for now)
     /// Whether to play a sound when showing the notification
@@ -144,6 +161,14 @@ pub const Notification = struct {
         }
         if (self.app_name.ptr != "znotify".ptr) {
             self.allocator.free(self.app_name);
+        }
+        // Free actions array
+        for (self.actions) |*action| {
+            var mut_action = @constCast(action);
+            mut_action.deinit(self.allocator);
+        }
+        if (self.actions.len > 0) {
+            self.allocator.free(self.actions);
         }
         self.icon.deinit(self.allocator);
     }

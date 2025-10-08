@@ -13,7 +13,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, args);
 
     var parser = cli.ArgParser.init(allocator, args);
-    const config = parser.parse() catch |err| {
+    var config = parser.parse() catch |err| {
         if (err == error.HelpRequested or err == error.VersionRequested) {
             return;
         }
@@ -21,6 +21,7 @@ pub fn main() !void {
         try cli.printHelp();
         return err;
     };
+    defer config.deinit();
 
     // Validate that we have required arguments (title)
     if (config.title == null or config.title.?.len == 0) {
@@ -53,6 +54,18 @@ pub fn main() !void {
             }
         }
 
+        // Apply actions if any
+        if (config.actions.items.len > 0) {
+            const actions = try allocator.alloc(notification.Action, config.actions.items.len);
+            for (config.actions.items, 0..) |action_config, i| {
+                actions[i] = .{
+                    .id = try allocator.dupe(u8, action_config.id),
+                    .label = try allocator.dupe(u8, action_config.label),
+                };
+            }
+            notif.actions = actions;
+        }
+
         const id = try term.send(notif);
         std.debug.print("Notification sent with ID: {}\n", .{id});
         return;
@@ -75,6 +88,18 @@ pub fn main() !void {
             const icon_path = try allocator.dupe(u8, i);
             notif.icon = .{ .file_path = icon_path };
         }
+    }
+
+    // Apply actions if any
+    if (config.actions.items.len > 0) {
+        const actions = try allocator.alloc(notification.Action, config.actions.items.len);
+        for (config.actions.items, 0..) |action_config, i| {
+            actions[i] = .{
+                .id = try allocator.dupe(u8, action_config.id),
+                .label = try allocator.dupe(u8, action_config.label),
+            };
+        }
+        notif.actions = actions;
     }
 
     const id = try platform_backend.send(notif);

@@ -494,12 +494,36 @@ pub const LinuxBackend = struct {
         }
         try appendString(&msg, self.allocator, notif.message);
 
-        // as: actions (empty array)
-        // Arrays must be 4-byte aligned before writing length
+        // as: actions array (format: ["id1", "label1", "id2", "label2", ...])
+        // Build actions array with string elements
+        var actions_array: std.ArrayList(u8) = .{};
+        try actions_array.ensureTotalCapacity(self.allocator, 128);
+        defer actions_array.deinit(self.allocator);
+
+        for (notif.actions) |action| {
+            // Each string needs 4-byte alignment
+            while (actions_array.items.len % 4 != 0) {
+                try actions_array.append(self.allocator, 0);
+            }
+            // Add action ID
+            try appendString(&actions_array, self.allocator, action.id);
+
+            // Align for next string
+            while (actions_array.items.len % 4 != 0) {
+                try actions_array.append(self.allocator, 0);
+            }
+            // Add action label
+            try appendString(&actions_array, self.allocator, action.label);
+        }
+
+        // Write actions array: 4-byte aligned length + array contents
         while (msg.items.len % 4 != 0) {
             try msg.append(self.allocator, 0);
         }
-        try msg.writer(self.allocator).writeInt(u32, 0, .little);
+        try msg.writer(self.allocator).writeInt(u32, @intCast(actions_array.items.len), .little);
+        if (actions_array.items.len > 0) {
+            try msg.appendSlice(self.allocator, actions_array.items);
+        }
 
         // a{sv}: hints (dict with urgency)
         // Build hints dictionary with urgency level

@@ -35,10 +35,11 @@ Currently implemented:
   - Icon support (theme names and file paths via -i option)
   - Notification updates via replaces_id (-r option)
   - Capability detection (GetCapabilities with helper functions)
+  - Action buttons (--action option, with daemon-specific behavior)
   - Compatible with all notification daemons (Dunst, Mako, notify-osd, GNOME, KDE, XFCE)
 
 Coming soon:
-- Action buttons with signal handlers (Linux)
+- ActionInvoked signal handler for callbacks (Linux)
 - Sound hints (Linux)
 - macOS notifications (UserNotifications framework)
 - Configuration file support

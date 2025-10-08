@@ -14,7 +14,7 @@ This document tracks the implementation status and planned features for all plat
 | Timeout/duration | ⚠️ Hardcoded | ✅ | ❌ |
 | Notification updates (replaces_id) | ❌ | ✅ | ❌ |
 | Capability detection | N/A | ✅ | N/A |
-| Action buttons | ❌ | ❌ | ❌ |
+| Action buttons | ❌ | ✅ | ❌ |
 | Sound/audio | ⚠️ Default | ❌ | ❌ |
 | Notification ID tracking | ❌ | ✅ | ❌ |
 | Click activation handling | ❌ | ❌ | ❌ |
@@ -129,16 +129,21 @@ This document tracks the implementation status and planned features for all plat
   - Use replaces_id to update existing notifications
   - CLI integration via -r/--replace-id option
   - Daemon returns same ID when replacing
+- [x] **Action Buttons** (P1)
+  - Pass actions array to D-Bus in proper format
+  - Format: ["action1", "Label 1", "action2", "Label 2"]
+  - CLI integration via --action <id> <label> option (repeatable)
+  - Test coverage with capability detection
+  - Note: Mako daemon uses CLI-based invocation (`makoctl invoke`/`makoctl menu`) rather than visual buttons; GNOME/KDE/Dunst show visual buttons
 
 #### 🚧 In Progress / Needs Work
 None - Phase 2 complete!
 
 #### 📋 TODO (Phase 3 - Advanced Features)
-- [ ] **Action Buttons** (P1)
-  - Pass actions array to D-Bus
-  - Format: ["action1", "Label 1", "action2", "Label 2"]
-  - Implement ActionInvoked signal handler
-  - Handle action callbacks
+- [ ] **ActionInvoked Signal Handler** (P2)
+  - Listen for ActionInvoked D-Bus signals
+  - Execute callbacks when actions are clicked
+  - Integrate with --wait mode for synchronous operation
 
 - [ ] **Sound Support** (P2)
   - Use `sound-file` hint for custom sounds

@@ -272,3 +272,58 @@ test "Linux backend notification updates with replaces_id" {
 
     try backend.close(new_id);
 }
+
+test "Linux backend action buttons" {
+    if (builtin.os.tag != .linux) return error.SkipZigTest;
+
+    const allocator = testing.allocator;
+    const linux = @import("../platform/linux.zig");
+
+    var backend = try linux.LinuxBackend.init(allocator);
+    defer backend.deinit();
+
+    if (!backend.isAvailable()) {
+        return error.SkipZigTest;
+    }
+
+    // Check if actions are supported
+    const supports_actions = try backend.supportsActions(allocator);
+    if (!supports_actions) {
+        std.debug.print("Actions not supported by daemon, skipping\n", .{});
+        return error.SkipZigTest;
+    }
+
+    // Create notification with action buttons
+    var notif = notification.Notification{
+        .allocator = allocator,
+        .title = "Action Test",
+        .message = "Testing action buttons",
+        .urgency = .normal,
+        .timeout_ms = 500,
+        .actions = &[_]notification.Action{},
+    };
+
+    // Create actions
+    const actions = try allocator.alloc(notification.Action, 2);
+    actions[0] = .{
+        .id = try allocator.dupe(u8, "accept"),
+        .label = try allocator.dupe(u8, "Accept"),
+    };
+    actions[1] = .{
+        .id = try allocator.dupe(u8, "decline"),
+        .label = try allocator.dupe(u8, "Decline"),
+    };
+    notif.actions = actions;
+
+    const id = try backend.send(notif);
+    try testing.expect(id > 0);
+
+    // Clean up
+    for (actions) |*action| {
+        var mut_action = @constCast(action);
+        mut_action.deinit(allocator);
+    }
+    allocator.free(actions);
+
+    try backend.close(id);
+}

@@ -245,13 +245,14 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs:
   - Icon support (theme names and file paths via -i/--icon option)
   - Notification updates via replaces_id (-r/--replace-id option)
   - GetCapabilities D-Bus method with capability checking helpers
+  - Action buttons (--action <id> <label> CLI option, repeatable)
   - Modular test suite with comprehensive coverage
 - Compatible with: GNOME, KDE, Dunst, Mako, notify-osd, XFCE4-notifyd
+- **Note on Action Buttons**: Mako daemon uses CLI-based action invocation (`makoctl invoke`/`makoctl menu`) rather than visual buttons. GNOME, KDE, and Dunst show visual buttons.
 - **TODO (Phase 3)**:
-  - Action buttons with signal handlers
+  - ActionInvoked signal handler for callbacks
   - Sound hints (sound-file, sound-name, suppress-sound)
   - Notification closure tracking (NotificationClosed signal)
-  - ActionInvoked signal handler
 - See `docs/backend-roadmap.md` for full implementation plan
 
 ### macOS

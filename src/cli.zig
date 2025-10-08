@@ -3,6 +3,12 @@ const notification = @import("notification.zig");
 const errors = @import("errors.zig");
 const build_options = @import("build_options");
 
+/// Action button configuration (id and label pair)
+pub const ActionConfig = struct {
+    id: []const u8,
+    label: []const u8,
+};
+
 /// Command-line configuration
 pub const Config = struct {
     // Positional arguments
@@ -16,6 +22,7 @@ pub const Config = struct {
     category: ?[]const u8 = null,
     app_name: ?[]const u8 = null,
     replace_id: ?u32 = null,
+    actions: std.ArrayList(ActionConfig) = undefined,
 
     // Behavior flags
     print_id: bool = false,
@@ -39,9 +46,8 @@ pub const Config = struct {
     /// Deinitializes the configuration and frees any allocated resources.
     /// Currently, most strings are slices from argv and don't require freeing.
     pub fn deinit(self: *Config) void {
-        // Free allocated strings if needed
-        // Most strings are slices from argv, so we don't free them
-        _ = self;
+        // Free actions ArrayList
+        self.actions.deinit(self.allocator);
     }
 };
 
@@ -58,10 +64,14 @@ pub const ArgParser = struct {
     ///   - allocator: Memory allocator for any required allocations
     ///   - args: Command-line arguments array (typically from std.process.argsAlloc)
     pub fn init(allocator: std.mem.Allocator, args: []const []const u8) ArgParser {
+        const config = Config{
+            .allocator = allocator,
+            .actions = .{},
+        };
         return ArgParser{
             .allocator = allocator,
             .args = args,
-            .config = Config{ .allocator = allocator },
+            .config = config,
         };
     }
 
@@ -163,6 +173,24 @@ pub const ArgParser = struct {
             self.config.replace_id = try std.fmt.parseInt(u32, value, 10);
         } else if (std.mem.startsWith(u8, option, "config=")) {
             self.config.config_file = option[7..];
+        } else if (std.mem.eql(u8, option, "action")) {
+            // --action takes two arguments: id and label
+            self.current += 1;
+            if (self.current >= self.args.len) {
+                return errors.ZNotifyError.InvalidArgument;
+            }
+            const action_id = self.args[self.current];
+
+            self.current += 1;
+            if (self.current >= self.args.len) {
+                return errors.ZNotifyError.InvalidArgument;
+            }
+            const action_label = self.args[self.current];
+
+            try self.config.actions.append(self.allocator, ActionConfig{
+                .id = action_id,
+                .label = action_label,
+            });
         } else {
             // Handle options with separate values
             if (std.mem.eql(u8, option, "timeout") or
@@ -282,6 +310,7 @@ pub fn printHelp() !void {
         \\    -c, --category <cat>      Notification category
         \\    -a, --app-name <name>     Application name (default: znotify)
         \\    -r, --replace-id <id>     Replace existing notification by ID
+        \\        --action <id> <label> Add action button (can be repeated)
         \\    -p, --print-id            Print notification ID to stdout
         \\    -w, --wait                Wait for user interaction
         \\        --no-sound            Disable notification sound
@@ -309,6 +338,9 @@ pub fn printHelp() !void {
         \\    # Replace previous notification
         \\    ID=$(znotify -p "Progress" "Starting...")
         \\    znotify -r $ID "Progress" "50% complete"
+        \\
+        \\    # Notification with action buttons
+        \\    znotify --action yes "Accept" --action no "Decline" "Confirm" "Apply changes?"
         \\
         );
 }
