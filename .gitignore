@@ -4,3 +4,7 @@
 # Zig build artifacts
 .zig-cache/
 zig-out/
+
+# Windows SDK reference headers (Microsoft licensed, for development reference only)
+docs/reference/*.abi.h
+docs/reference/*.abi.md
