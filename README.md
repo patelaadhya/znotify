@@ -22,10 +22,12 @@ Currently implemented:
 - Performance benchmarks
 - Docker-based testing infrastructure
 - Platform abstraction layer
-- **Windows notifications** (WinRT Toast API with COM integration)
+- **Windows notifications** (WinRT Toast API with direct COM implementation)
   - Toast notifications with title and message
   - Start Menu shortcut creation with AppUserModelID
   - Urgency level mapping (duration, audio, and scenario attributes)
+  - Platform-specific duration control (--duration short|long)
+  - Direct COM calls for 17x performance improvement vs PowerShell
   - Action Center integration
 - **Linux notifications** (D-Bus implementation)
   - D-Bus binary protocol implementation (zero dependencies)
@@ -114,8 +116,11 @@ znotify "Warning" "Disk space low" -u critical
 # With icon
 znotify "Update Available" "Click to install" -i software-update
 
-# Custom timeout
+# Custom timeout (Linux/macOS)
 znotify "Auto-save" "Changes saved" -t 2000
+
+# Windows duration control
+znotify "Quick Alert" "Disappears in 5-10s" --duration short
 
 # Action buttons with wait mode (Linux with Dunst)
 znotify "Confirm" "Delete file?" \

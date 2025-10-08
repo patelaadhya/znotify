@@ -63,6 +63,7 @@ pub fn main() !void {
         // Apply config settings
         if (config.urgency) |u| notif.urgency = u;
         if (config.timeout_ms) |t| notif.timeout_ms = t;
+        if (config.duration) |d| notif.windows_duration = d;
         if (config.app_name) |a| notif.app_name = a;
         if (config.replace_id) |r| notif.replace_id = r;
         if (config.icon) |i| {
@@ -99,6 +100,7 @@ pub fn main() !void {
     // Apply config settings
     if (config.urgency) |u| notif.urgency = u;
     if (config.timeout_ms) |t| notif.timeout_ms = t;
+    if (config.duration) |d| notif.windows_duration = d;
     if (config.app_name) |a| notif.app_name = a;
     if (config.replace_id) |r| notif.replace_id = r;
     if (config.icon) |i| {

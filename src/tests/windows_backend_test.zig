@@ -85,7 +85,7 @@ test "Windows backend XML generation" {
     try testing.expect(std.mem.indexOf(u8, xml, "Looping.Alarm") != null);
 }
 
-test "Windows backend urgency levels - low" {
+test "Windows backend timeout handling - short duration" {
     if (builtin.os.tag != .windows) return error.SkipZigTest;
 
     const allocator = testing.allocator;
@@ -99,13 +99,13 @@ test "Windows backend urgency levels - low" {
         return error.SkipZigTest;
     }
 
-    // Create test notification with low urgency
+    // Create test notification with short timeout (<10s)
     const notif = notification.Notification{
         .allocator = allocator,
-        .title = "Low Urgency Test",
+        .title = "Short Timeout Test",
         .message = "This should disappear quickly (5-10s)",
         .urgency = .low,
-        .timeout_ms = null,
+        .timeout_ms = 5000, // 5 seconds - maps to "short" duration
     };
 
     // Send notification and verify XML generation
@@ -118,10 +118,10 @@ test "Windows backend urgency levels - low" {
     const id = try windows_backend.send(notif);
     try testing.expect(id > 0);
 
-    std.debug.print("Low urgency notification sent (ID: {})\n", .{id});
+    std.debug.print("Short timeout notification sent (ID: {})\n", .{id});
 }
 
-test "Windows backend urgency levels - normal" {
+test "Windows backend timeout handling - long duration" {
     if (builtin.os.tag != .windows) return error.SkipZigTest;
 
     const allocator = testing.allocator;
@@ -135,13 +135,13 @@ test "Windows backend urgency levels - normal" {
         return error.SkipZigTest;
     }
 
-    // Create test notification with normal urgency
+    // Create test notification with long timeout (≥10s)
     const notif = notification.Notification{
         .allocator = allocator,
-        .title = "Normal Urgency Test",
+        .title = "Long Timeout Test",
         .message = "Standard notification (25s display)",
         .urgency = .normal,
-        .timeout_ms = null,
+        .timeout_ms = 15000, // 15 seconds - maps to "long" duration
     };
 
     // Send notification and verify XML generation
@@ -154,10 +154,10 @@ test "Windows backend urgency levels - normal" {
     const id = try windows_backend.send(notif);
     try testing.expect(id > 0);
 
-    std.debug.print("Normal urgency notification sent (ID: {})\n", .{id});
+    std.debug.print("Long timeout notification sent (ID: {})\n", .{id});
 }
 
-test "Windows backend urgency levels - critical" {
+test "Windows backend urgency levels - critical scenario" {
     if (builtin.os.tag != .windows) return error.SkipZigTest;
 
     const allocator = testing.allocator;
@@ -178,7 +178,7 @@ test "Windows backend urgency levels - critical" {
         .title = "Critical Urgency Test",
         .message = "Persistent notification with urgent scenario",
         .urgency = .critical,
-        .timeout_ms = null,
+        .timeout_ms = 20000, // 20 seconds - maps to "long" duration
     };
 
     // Send notification and verify XML generation

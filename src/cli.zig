@@ -18,6 +18,7 @@ pub const Config = struct {
     // Optional flags
     urgency: ?notification.Urgency = null,
     timeout_ms: ?u32 = null,
+    duration: ?notification.WindowsDuration = null, // Windows-specific: overrides timeout_ms mapping
     icon: ?[]const u8 = null,
     category: ?[]const u8 = null,
     app_name: ?[]const u8 = null,
@@ -163,6 +164,9 @@ pub const ArgParser = struct {
         } else if (std.mem.startsWith(u8, option, "timeout=")) {
             const value = option[8..];
             self.config.timeout_ms = try std.fmt.parseInt(u32, value, 10);
+        } else if (std.mem.startsWith(u8, option, "duration=")) {
+            const value = option[9..];
+            self.config.duration = try notification.WindowsDuration.fromString(value);
         } else if (std.mem.startsWith(u8, option, "urgency=")) {
             const value = option[8..];
             self.config.urgency = try notification.Urgency.fromString(value);
@@ -198,6 +202,7 @@ pub const ArgParser = struct {
         } else {
             // Handle options with separate values
             if (std.mem.eql(u8, option, "timeout") or
+                std.mem.eql(u8, option, "duration") or
                 std.mem.eql(u8, option, "urgency") or
                 std.mem.eql(u8, option, "icon") or
                 std.mem.eql(u8, option, "category") or
@@ -261,6 +266,8 @@ pub const ArgParser = struct {
     fn setOptionValue(self: *ArgParser, option: []const u8, value: []const u8) !void {
         if (std.mem.eql(u8, option, "timeout")) {
             self.config.timeout_ms = try std.fmt.parseInt(u32, value, 10);
+        } else if (std.mem.eql(u8, option, "duration")) {
+            self.config.duration = try notification.WindowsDuration.fromString(value);
         } else if (std.mem.eql(u8, option, "urgency")) {
             self.config.urgency = try notification.Urgency.fromString(value);
         } else if (std.mem.eql(u8, option, "icon")) {
@@ -296,7 +303,10 @@ pub const ArgParser = struct {
 
 /// Print help text
 pub fn printHelp() !void {
+    const builtin = @import("builtin");
     const stdout = std.fs.File.stdout();
+
+    // Base help text
     _ = try stdout.write(
         \\ZNotify - Cross-platform desktop notification utility
         \\
@@ -308,7 +318,27 @@ pub fn printHelp() !void {
         \\    [message]   Notification message body (optional)
         \\
         \\OPTIONS:
-        \\    -t, --timeout <ms>        Notification display time in milliseconds (0 = persistent)
+        \\
+    );
+
+    // Timeout option (hidden on Windows since it doesn't support arbitrary timeouts)
+    if (builtin.os.tag != .windows) {
+        _ = try stdout.write(
+            \\    -t, --timeout <ms>        Notification display time in milliseconds (0 = persistent)
+            \\
+        );
+    }
+
+    // Windows-specific duration option
+    if (builtin.os.tag == .windows) {
+        _ = try stdout.write(
+            \\        --duration <dur>      Windows only: short (5-10s) | long (~25s)
+            \\
+        );
+    }
+
+    // Continue with common options
+    _ = try stdout.write(
         \\    -u, --urgency <level>     Set urgency: low|normal|critical
         \\    -i, --icon <icon>         Icon: info|warning|error|success|<path>
         \\    -c, --category <cat>      Notification category
@@ -337,15 +367,35 @@ pub fn printHelp() !void {
         \\    # Urgent notification with icon
         \\    znotify -u critical -i error "Error" "Build failed"
         \\
-        \\    # Timed notification
-        \\    znotify -t 10000 "Reminder" "Meeting in 10 minutes"
-        \\
+    );
+
+    // Platform-specific timeout/duration examples
+    if (builtin.os.tag == .windows) {
+        _ = try stdout.write(
+            \\
+            \\    # Windows duration control
+            \\    znotify --duration short "Quick" "Disappears in 5-10 seconds"
+            \\
+            \\
+        );
+    } else if (builtin.os.tag == .linux) {
+        _ = try stdout.write(
+            \\
+            \\    # Linux timeout control
+            \\    znotify -t 10000 "Reminder" "Meeting in 10 minutes"
+            \\
+            \\
+        );
+    }
+
+    _ = try stdout.write(
         \\    # Replace previous notification
         \\    ID=$(znotify -p "Progress" "Starting...")
         \\    znotify -r $ID "Progress" "50% complete"
         \\
         \\    # Notification with action buttons
         \\    znotify --action yes "Accept" --action no "Decline" "Confirm" "Apply changes?"
+        \\
         \\
         );
 }

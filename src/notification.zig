@@ -1,5 +1,30 @@
 const std = @import("std");
 
+/// Windows-specific toast duration (platform limitation).
+/// Windows Toast API only supports two fixed durations, not arbitrary millisecond timeouts.
+pub const WindowsDuration = enum {
+    /// Short duration: 5-10 seconds (Windows-controlled, cannot be shorter)
+    short,
+    /// Long duration: ~25 seconds
+    long,
+
+    /// Converts a string to a WindowsDuration enum value.
+    /// Returns error.InvalidDuration if the string is not recognized.
+    pub fn fromString(s: []const u8) !WindowsDuration {
+        if (std.mem.eql(u8, s, "short")) return .short;
+        if (std.mem.eql(u8, s, "long")) return .long;
+        return error.InvalidDuration;
+    }
+
+    /// Converts a WindowsDuration enum value to its string representation.
+    pub fn toString(self: WindowsDuration) []const u8 {
+        return switch (self) {
+            .short => "short",
+            .long => "long",
+        };
+    }
+};
+
 /// Notification urgency levels that determine how the notification is displayed.
 /// Maps to platform-specific urgency/priority mechanisms.
 pub const Urgency = enum(u8) {
@@ -134,6 +159,8 @@ pub const Notification = struct {
     // Platform-specific hints (simplified for now)
     /// Whether to play a sound when showing the notification
     sound_enabled: bool = true,
+    /// Windows only: Explicit duration control (overrides timeout_ms mapping)
+    windows_duration: ?WindowsDuration = null,
 
     // Allocator for dynamic fields
     /// Allocator used for all memory management
