@@ -23,6 +23,27 @@ pub fn main() !void {
     };
     defer config.deinit();
 
+    // Handle special commands first (before validating required arguments)
+    if (config.help) {
+        try cli.printHelp();
+        return;
+    }
+
+    if (config.version) {
+        try cli.printVersion();
+        return;
+    }
+
+    if (config.doctor) {
+        std.debug.print("Doctor command not yet implemented\n", .{});
+        return;
+    }
+
+    if (config.init_config) {
+        std.debug.print("Init-config command not yet implemented\n", .{});
+        return;
+    }
+
     // Validate that we have required arguments (title)
     if (config.title == null or config.title.?.len == 0) {
         std.debug.print("Error: Title is required\n", .{});
