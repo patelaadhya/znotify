@@ -220,4 +220,5 @@ test {
     // Import platform backend tests
     _ = @import("tests/linux_backend_test.zig");
     _ = @import("tests/windows_backend_test.zig");
+    _ = @import("tests/macos_backend_test.zig");
 }

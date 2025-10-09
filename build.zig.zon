@@ -1,0 +1,13 @@
+.{
+    .name = .znotify,
+    .version = "0.1.0",
+    .fingerprint = 0x45cd1c70786c2e05,
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "docs",
+        "README.md",
+        "LICENSE",
+    },
+}

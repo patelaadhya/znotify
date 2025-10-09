@@ -31,6 +31,8 @@ pub const ZNotifyError = error{
     WindowsCOMError,
     MacOSAuthorizationDenied,
     MacOSFrameworkError,
+    AuthorizationDenied,
+    AuthorizationNotDetermined,
 
     // File system errors
     FileNotFound,
@@ -204,6 +206,8 @@ pub fn getRemediationSuggestion(err: ZNotifyError) ?[]const u8 {
         error.DBusConnectionFailed => "Failed to connect to D-Bus. Ensure D-Bus daemon is running: systemctl --user status dbus",
         error.WindowsCOMError => "Windows COM initialization failed. This is usually a system issue. Try restarting.",
         error.MacOSAuthorizationDenied => "macOS notification authorization denied. Grant permission in System Preferences > Notifications.",
+        error.AuthorizationDenied => "Notification authorization denied. Grant permission in system settings.",
+        error.AuthorizationNotDetermined => "Notification authorization not determined. Please run the app first to request permission.",
         error.ConfigFileNotFound => "Configuration file not found. Run 'znotify --init-config' to create a default configuration.",
         error.OutOfMemory => "System is out of memory. Close some applications and try again.",
         else => null,
@@ -242,6 +246,8 @@ pub fn getExitCode(err: ZNotifyError) u8 {
         error.WindowsCOMError => 43,
         error.MacOSAuthorizationDenied => 44,
         error.MacOSFrameworkError => 45,
+        error.AuthorizationDenied => 46,
+        error.AuthorizationNotDetermined => 47,
 
         // File system errors (50-59)
         error.FileNotFound => 50,

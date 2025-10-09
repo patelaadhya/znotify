@@ -128,6 +128,16 @@ pub fn main() !void {
     const id = try platform_backend.send(notif);
     std.debug.print("Notification sent with ID: {}\n", .{id});
 
+    // On macOS, run event loop briefly to allow async notification dispatch
+    const builtin_os = @import("builtin");
+    if (builtin_os.os.tag == .macos) {
+        const c = @cImport({
+            @cInclude("CoreFoundation/CoreFoundation.h");
+        });
+        // Brief run loop to dispatch the notification before exiting
+        _ = c.CFRunLoopRunInMode(c.kCFRunLoopDefaultMode, 0.2, 0);
+    }
+
     // If wait mode is enabled and we have actions, subscribe and wait for signal
     if (config.wait and config.actions.items.len > 0) {
         const builtin = @import("builtin");

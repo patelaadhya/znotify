@@ -229,19 +229,22 @@ pub const LibnotifyBackend = struct {
 #### 3.3.3 macOS Implementation
 
 ```zig
-// macOS using Objective-C runtime
+// macOS using UserNotifications framework (requires 10.14+)
 pub const MacOSBackend = struct {
-    user_notification_center: *anyopaque,
-    
+    allocator: Allocator,
+    next_id: u32,
+    authorized: bool,
+
     pub fn init(allocator: Allocator) !MacOSBackend {
-        // Get NSUserNotificationCenter instance
-        // Set delegate if needed
+        // Get UNUserNotificationCenter
+        // Request authorization
+        // Must run from app bundle
     }
-    
+
     pub fn send(self: *MacOSBackend, notif: Notification) !u32 {
-        // Create NSUserNotification
-        // Set properties
-        // Deliver notification
+        // Create UNMutableNotificationContent
+        // Create UNNotificationRequest
+        // Add to notification center
     }
 };
 

@@ -29,7 +29,9 @@ pub fn build(b: *std.Build) void {
         },
         .macos => {
             exe.linkFramework("Foundation");
+            exe.linkFramework("CoreFoundation");
             exe.linkFramework("AppKit");
+            exe.linkFramework("UserNotifications");
             exe.linkSystemLibrary("objc");
         },
         else => {},
@@ -42,6 +44,44 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addOptions("build_options", options);
 
     b.installArtifact(exe);
+
+    // macOS: Create app bundle for UserNotifications support
+    if (target.result.os.tag == .macos) {
+        // Create ZNotify.app bundle structure
+        const bundle_step = b.addInstallDirectory(.{
+            .source_dir = b.path("bundle_template"),
+            .install_dir = .prefix,
+            .install_subdir = "ZNotify.app",
+        });
+
+        // Install executable into bundle
+        const exe_install = b.addInstallFile(
+            exe.getEmittedBin(),
+            "ZNotify.app/Contents/MacOS/znotify",
+        );
+
+        exe_install.step.dependOn(&exe.step);
+        bundle_step.step.dependOn(&exe_install.step);
+
+        // Code sign the app bundle (required for UserNotifications)
+        const codesign = b.addSystemCommand(&[_][]const u8{
+            "codesign",
+            "--force",
+            "--deep",
+            "--sign",
+            "-",
+            "zig-out/ZNotify.app",
+        });
+        codesign.step.dependOn(&bundle_step.step);
+        b.getInstallStep().dependOn(&codesign.step);
+
+        // Create symlink for CLI usage: zig-out/bin/znotify -> ZNotify.app/Contents/MacOS/znotify
+        const symlink_step = b.addInstallFile(
+            exe.getEmittedBin(),
+            "bin/znotify",
+        );
+        b.getInstallStep().dependOn(&symlink_step.step);
+    }
 
     // Run command
     const run_cmd = b.addRunArtifact(exe);
@@ -61,9 +101,41 @@ pub fn build(b: *std.Build) void {
         }),
     });
     unit_tests.root_module.addOptions("build_options", options);
-    const run_unit_tests = b.addRunArtifact(unit_tests);
+
+    // Link frameworks for macOS tests
+    if (target.result.os.tag == .macos) {
+        unit_tests.linkFramework("Foundation");
+        unit_tests.linkFramework("CoreFoundation");
+        unit_tests.linkFramework("AppKit");
+        unit_tests.linkFramework("UserNotifications");
+        unit_tests.linkSystemLibrary("objc");
+    }
+
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
+
+    // macOS: Run tests from within app bundle to provide bundle context for UNUserNotificationCenter
+    if (target.result.os.tag == .macos) {
+        // Install test executable into app bundle
+        const test_install = b.addInstallFile(
+            unit_tests.getEmittedBin(),
+            "ZNotify.app/Contents/MacOS/znotify_test",
+        );
+        test_install.step.dependOn(&unit_tests.step);
+        // Ensure the app bundle is fully built and signed before installing tests
+        test_install.step.dependOn(b.getInstallStep());
+
+        // Run tests from within the bundle (provides bundle context)
+        const run_bundled_tests = b.addSystemCommand(&[_][]const u8{
+            "zig-out/ZNotify.app/Contents/MacOS/znotify_test",
+        });
+        run_bundled_tests.step.dependOn(&test_install.step);
+
+        test_step.dependOn(&run_bundled_tests.step);
+    } else {
+        // Non-macOS: Run tests normally
+        const run_unit_tests = b.addRunArtifact(unit_tests);
+        test_step.dependOn(&run_unit_tests.step);
+    }
 
     // Benchmark command
     const bench = b.addExecutable(.{

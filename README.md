@@ -42,10 +42,17 @@ Currently implemented:
   - Wait timeout support (--wait-timeout in milliseconds)
   - Compatible with all notification daemons (Dunst, Mako, notify-osd, GNOME, KDE, XFCE)
   - **Note**: Dunst required for visual action buttons; Mako uses CLI-based invocation
+- **macOS notifications**
+  - Native notifications with title and message
+  - Requires macOS 10.14+ (Mojave or later)
+  - Notification Center integration
 
 Coming soon:
+- Icon support (macOS)
+- Urgency levels (macOS)
+- Timeout control (macOS)
+- Action buttons (macOS, Windows)
 - Sound hints (Linux)
-- macOS notifications (UserNotifications framework)
 - Configuration file support
 - Shell_NotifyIcon fallback (Windows 8.1)
 

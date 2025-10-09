@@ -6,8 +6,8 @@ This document tracks the implementation status and planned features for all plat
 
 | Feature | Windows | Linux | macOS |
 |---------|---------|-------|-------|
-| Basic notification (title + message) | ✅ | ✅ | ⚠️ Stub |
-| COM/Framework initialization | ✅ | ✅ | ⚠️ TODO |
+| Basic notification (title + message) | ✅ | ✅ | ✅ |
+| COM/Framework initialization | ✅ | ✅ | ✅ |
 | AppUserModelID / shortcut creation | ✅ | N/A | N/A |
 | Icon support | ❌ | ✅ | ❌ |
 | Urgency levels | ✅ | ✅ | ❌ |
@@ -16,9 +16,9 @@ This document tracks the implementation status and planned features for all plat
 | Capability detection | N/A | ✅ | N/A |
 | Action buttons | ❌ | ✅ | ❌ |
 | Sound/audio | ✅ | ❌ | ❌ |
-| Notification ID tracking | ❌ | ✅ | ❌ |
+| Notification ID tracking | ❌ | ✅ | ✅ |
 | Click activation handling | ❌ | ❌ | ❌ |
-| Error handling | ⚠️ Basic | ✅ | ⚠️ Basic |
+| Error handling | ⚠️ Basic | ✅ | ✅ |
 
 **Legend:**
 - ✅ Fully implemented
@@ -191,38 +191,43 @@ None - Phase 3 complete!
 
 ### macOS Backend
 
-**Status:** Stub implementation, Objective-C bridge needed
+**Status:** ✅ Phase 1 Complete - Core functionality working
 
-#### ✅ Completed
+#### ✅ Completed (Phase 1 - Core)
 - [x] Platform detection
 - [x] Basic backend structure
 - [x] Error types defined
+- [x] **Custom Objective-C Runtime Bindings** (P0)
+  - Implemented objc.zig (~170 lines) with zero external dependencies
+  - Custom msgSend implementation with comptime function type generation
+  - Objective-C block support for completion handlers
+  - Class and Object wrapper types
+  - No dependency on other external libraries
+- [x] **Framework Initialization** (P0)
+  - UserNotifications framework (requires macOS 10.14+)
+  - Runtime version detection (handles both 10.x and 11+ versioning scheme)
+  - App bundle detection (UNUserNotificationCenter requires running from app bundle)
+- [x] **UNUserNotificationCenter Implementation** (P0)
+  - Proper authorization request using requestAuthorizationWithOptions:completionHandler:
+  - Block-based completion handler for authorization response
+  - Create UNMutableNotificationContent
+  - Set title and body (with null-terminated string handling)
+  - Create UNNotificationRequest with unique identifiers
+  - Schedule notification via addNotificationRequest
+- [x] **Basic Notification Display** (P0)
+  - Title and message support
+  - Return notification identifier (incrementing u32)
+- [x] **App Bundle Infrastructure**
+  - ZNotify.app bundle structure with Info.plist
+  - Automatic ad-hoc code signing in build system
+  - CFRunLoop integration (0.2s for async notification dispatch)
+- [x] **Test Infrastructure**
+  - Tests run from within app bundle (provides bundle context)
+  - 5 comprehensive tests (init, send, version detection, urgency, timeout)
+  - Solves UNUserNotificationCenter testing challenge (requires bundle identifier)
 
 #### 🚧 In Progress / Needs Work
-None - backend is currently a stub.
-
-#### 📋 TODO (Phase 1 - Core)
-- [ ] **Framework Initialization** (P0)
-  - Import UserNotifications framework (macOS 10.14+)
-  - Import AppKit/NSUserNotificationCenter (macOS 10.12-10.13)
-  - Runtime version detection for API selection
-
-- [ ] **UNUserNotificationCenter Implementation** (P0 - Modern API)
-  - Request authorization
-  - Create UNMutableNotificationContent
-  - Set title and body
-  - Create UNNotificationRequest
-  - Schedule notification
-
-- [ ] **NSUserNotificationCenter Fallback** (P0 - Legacy API)
-  - Create NSUserNotification
-  - Set title, informativeText
-  - Deliver notification
-  - Handle deprecation warnings
-
-- [ ] **Basic Notification Display** (P0)
-  - Title and message support
-  - Return notification identifier
+None - Phase 1 complete, ready for Phase 2 features.
 
 #### 📋 TODO (Phase 2 - Features)
 - [ ] **Icon Support** (P1)
@@ -261,12 +266,25 @@ None - backend is currently a stub.
   - Execute callback commands
 
 #### Technical Notes
-- **Objective-C Bridge**: Need to use Zig's `@cImport` or manual extern declarations
-- **Framework Linking**: Link Foundation, AppKit, UserNotifications frameworks
-- **Sandbox Considerations**: Unsigned/unnotarized apps may have limitations
-- **Authorization**: Must request and handle user permission
-- **Modern vs Legacy**: Prioritize UNUserNotificationCenter, fall back to NSUserNotificationCenter
-- **Testing**: Requires physical macOS machine or VM
+- **Objective-C Interop**: Custom implementation in objc.zig (~170 lines) with zero external dependencies
+  - msgSend with comptime function type generation (not variadic)
+  - Block literal support matching LLVM block runtime ABI
+  - BlockDescriptor, BlockFlags structures for completion handlers
+  - Direct C runtime calls only (objc_msgSend, sel_registerName, objc_getClass)
+  - No dependency on external libraries
+- **Framework Linking**: Foundation, CoreFoundation, AppKit, UserNotifications frameworks linked
+- **App Bundle Requirement**: UNUserNotificationCenter requires running from a valid .app bundle with Info.plist and bundle identifier
+- **Code Signing**: Ad-hoc signing (`codesign --sign -`) sufficient for local development; distribution requires Apple Developer ID
+- **Authorization**: Proper requestAuthorizationWithOptions:completionHandler: implementation with block-based callback
+  - Follows Apple's guideline: "Always call this method before scheduling any local notifications"
+  - Block signature: void (^)(BOOL granted, NSError *error)
+  - System caches authorization, safe to call on every notification send
+  - 200ms sleep after request to allow authorization dialog to complete
+- **Version Requirement**: macOS 10.14+ (Mojave) required for UNUserNotificationCenter
+- **CFRunLoop**: 0.2s event loop required after sending to allow async notification dispatch before process exit
+- **Testing Challenge**: Tests must run from within app bundle to access UNUserNotificationCenter (solved via build.zig placing test executable in ZNotify.app/Contents/MacOS/)
+- **Version Detection**: Handles Apple's versioning scheme change from 10.x to 11, 12, 13... 26 (macOS Tahoe)
+- **String Handling**: Null-terminated string copies required for NSString stringWithUTF8String: (notif.title/message are not null-terminated)
 
 ---
 
@@ -291,9 +309,9 @@ None - backend is currently a stub.
 **macOS (Next):**
 1. Framework initialization and version detection
 2. UNUserNotificationCenter implementation
-3. NSUserNotificationCenter fallback
-4. Title + message display
-5. Authorization handling
+3. Title + message display
+4. Authorization handling
+5. App bundle requirement enforcement
 
 **Windows (Refinement):**
 1. Fix urgency level mapping
@@ -356,7 +374,7 @@ None - backend is currently a stub.
 - Notification updates (by ID)
 - Action buttons (Linux/macOS)
 - Capabilities detection (Linux)
-- Fallback implementations (Windows 8.1, macOS 10.12)
+- Fallback implementations (Windows 8.1)
 
 ### P2 (Nice to Have - Enhanced features)
 - Sound customization
@@ -386,8 +404,7 @@ None - backend is currently a stub.
 - [ ] Arch Linux (Mako)
 - [ ] KDE Plasma
 - [ ] XFCE4
-- [ ] macOS 11+ (UNUserNotificationCenter)
-- [ ] macOS 10.12-10.13 (NSUserNotificationCenter)
+- [ ] macOS 10.14+ (UNUserNotificationCenter)
 
 ### Feature Test Matrix
 For each platform, verify:
@@ -417,10 +434,11 @@ For each platform, verify:
 - **Daemon variations**: Behavior differs between Dunst, Mako, notify-osd, desktop environments.
 
 ### macOS
-- **No macOS development environment**: Need physical Mac or VM for implementation and testing.
-- **Objective-C bridge**: Zig's C interop requires careful handling of Objective-C runtime.
-- **Authorization flow**: Apps must request permission before showing notifications.
-- **Code signing**: Unsigned apps may have limited notification capabilities.
+- ~~**No macOS development environment**~~: **RESOLVED** - Implemented and tested on macOS 26.0.1 (Tahoe).
+- ~~**Objective-C bridge**~~: **RESOLVED** - Custom objc.zig implementation (~170 lines) with zero external dependencies.
+- ~~**Authorization flow**~~: **RESOLVED** - Proper requestAuthorizationWithOptions:completionHandler: with block-based callback.
+- ~~**Code signing**~~: **RESOLVED** - Ad-hoc signing automated in build.zig.
+- **Bundle-context testing**: Tests must run from within .app bundle (implemented via custom build.zig logic).
 
 ---
 
@@ -437,9 +455,11 @@ For each platform, verify:
 - **Optional:** libdbus-1.so (if not implementing protocol directly)
 
 ### macOS
-- **Required:** macOS SDK (Foundation, AppKit, UserNotifications frameworks)
-- **Runtime:** macOS 10.12+
-- **Optional:** Xcode Command Line Tools for development
+- **Required:** macOS SDK (Foundation, CoreFoundation, AppKit, UserNotifications frameworks)
+- **Runtime:** macOS 10.12+ (10.14+ recommended for modern API), Objective-C runtime (libobjc)
+- **Development:** Xcode Command Line Tools (provides frameworks and code signing tools)
+- **Build:** Ad-hoc code signing via `codesign` (automatic in build.zig)
+- **Zero External Dependencies:** Custom objc.zig implementation (no other external libraries required)
 
 ---
 
@@ -476,8 +496,7 @@ When implementing backend features:
 
 ### macOS
 - [UserNotifications Framework](https://developer.apple.com/documentation/usernotifications)
-- [NSUserNotificationCenter (Deprecated)](https://developer.apple.com/documentation/foundation/nsusernotificationcenter)
 
 ---
 
-Last Updated: 2025-10-07
+Last Updated: 2025-10-08
