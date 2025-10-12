@@ -209,6 +209,14 @@ pub const MacOSBackend = struct {
         const bodyStr = NSString.msgSend(objc.Object, "stringWithUTF8String:", .{message_z.ptr});
         initializedContent.msgSend(void, "setBody:", .{bodyStr.value});
 
+        // Add icon attachment if specified
+        if (notif.icon != .none) {
+            self.addIconAttachment(initializedContent, notif.icon) catch |err| {
+                // Log error but don't fail the notification
+                std.debug.print("Warning: Failed to attach icon: {}\n", .{err});
+            };
+        }
+
         // Create notification request with unique identifier
         const UNNotificationRequest = objc.getClass("UNNotificationRequest") orelse return error.ClassNotFound;
 
@@ -224,6 +232,168 @@ pub const MacOSBackend = struct {
 
         // Add notification request to center
         center.msgSend(void, "addNotificationRequest:withCompletionHandler:", .{ request.value, @as(?*anyopaque, null) });
+    }
+
+    /// Add icon attachment to notification content
+    fn addIconAttachment(self: *MacOSBackend, content: objc.Object, icon: notification.Icon) !void {
+        const file_path = switch (icon) {
+            .none => return, // Nothing to attach
+            .file_path => |path| path,
+            .builtin => |builtin_icon| {
+                // Map builtin icons to SF Symbol names
+                const symbol_name = switch (builtin_icon) {
+                    .info => "info.circle",
+                    .warning => "exclamationmark.triangle",
+                    .@"error" => "xmark.circle",
+                    .question => "questionmark.circle",
+                    .success => "checkmark.circle",
+                };
+                return self.attachSystemIcon(content, symbol_name);
+            },
+            .url => {
+                // URL icons not supported on macOS - requires downloading which conflicts
+                // with privacy/lightweight design goals
+                std.debug.print("Warning: URL icons not supported on macOS, ignoring\n", .{});
+                return;
+            },
+        };
+
+        return self.attachFileIcon(content, file_path);
+    }
+
+    /// Attach icon from file path
+    fn attachFileIcon(_: *MacOSBackend, content: objc.Object, file_path: []const u8) !void {
+        // Validate file exists
+        const file = std.fs.cwd().openFile(file_path, .{}) catch |err| {
+            std.debug.print("Failed to open icon file '{s}': {}\n", .{ file_path, err });
+            return error.IconFileNotFound;
+        };
+        file.close();
+
+        const NSURL = objc.getClass("NSURL") orelse return error.ClassNotFound;
+        const NSString = objc.getClass("NSString") orelse return error.ClassNotFound;
+
+        // Create file URL directly from the user's file path (no copying)
+        var path_buf: [std.fs.max_path_bytes:0]u8 = undefined;
+        const path_z = try std.fmt.bufPrintZ(&path_buf, "{s}", .{file_path});
+        const pathStr = NSString.msgSend(objc.Object, "stringWithUTF8String:", .{path_z.ptr});
+
+        const fileURL = NSURL.msgSend(objc.Object, "fileURLWithPath:", .{pathStr.value});
+
+        return createAttachment(content, fileURL, "icon-attachment");
+    }
+
+    /// Attach system icon using SF Symbols
+    fn attachSystemIcon(self: *MacOSBackend, content: objc.Object, symbol_name: []const u8) !void {
+        const NSImage = objc.getClass("NSImage") orelse return error.ClassNotFound;
+        const NSString = objc.getClass("NSString") orelse return error.ClassNotFound;
+
+        // Create symbol name string
+        var symbol_buf: [128:0]u8 = undefined;
+        const symbol_z = try std.fmt.bufPrintZ(&symbol_buf, "{s}", .{symbol_name});
+        const symbolStr = NSString.msgSend(objc.Object, "stringWithUTF8String:", .{symbol_z.ptr});
+
+        // Create system image from SF Symbol
+        const image = NSImage.msgSend(objc.Object, "imageWithSystemSymbolName:accessibilityDescription:", .{ symbolStr.value, @as(?*anyopaque, null) });
+
+        if (image.value == null) {
+            return error.SystemIconNotFound;
+        }
+
+        // Get system temporary directory
+        const tmpDirStr = NSString.msgSend(objc.Object, "stringWithUTF8String:", .{"/tmp"});
+        const tmpPath = try std.fmt.allocPrint(self.allocator, "/tmp/znotify_icon_{d}.png", .{std.time.timestamp()});
+        defer self.allocator.free(tmpPath);
+
+        // Create null-terminated version for C API
+        const tmp_path = try self.allocator.dupeZ(u8, tmpPath);
+        defer self.allocator.free(tmp_path);
+        _ = tmpDirStr;
+
+        // Get TIFF representation and convert to PNG
+        const tiffData = image.msgSend(objc.Object, "TIFFRepresentation", .{});
+        if (tiffData.value == null) {
+            return error.ImageConversionFailed;
+        }
+
+        const NSBitmapImageRep = objc.getClass("NSBitmapImageRep") orelse return error.ClassNotFound;
+        const imageRep = NSBitmapImageRep.msgSend(objc.Object, "imageRepWithData:", .{tiffData.value});
+        if (imageRep.value == null) {
+            return error.ImageConversionFailed;
+        }
+
+        // Convert to PNG
+        const NSBitmapImageFileTypePNG: i64 = 4;
+        const pngData = imageRep.msgSend(objc.Object, "representationUsingType:properties:", .{ NSBitmapImageFileTypePNG, @as(?*anyopaque, null) });
+        if (pngData.value == null) {
+            return error.ImageConversionFailed;
+        }
+
+        // Write to file
+        const pathStr = NSString.msgSend(objc.Object, "stringWithUTF8String:", .{tmp_path.ptr});
+        const success = pngData.msgSend(u8, "writeToFile:atomically:", .{ pathStr.value, @as(u8, 1) });
+        if (success == 0) {
+            return error.ImageWriteFailed;
+        }
+
+        // Now attach the temporary file
+        const NSURL = objc.getClass("NSURL") orelse return error.ClassNotFound;
+        const fileURL = NSURL.msgSend(objc.Object, "fileURLWithPath:", .{pathStr.value});
+
+        return createAttachment(content, fileURL, "system-icon-attachment");
+    }
+
+    /// Helper to create UNNotificationAttachment
+    fn createAttachment(content: objc.Object, fileURL: objc.Object, identifier: []const u8) !void {
+        const UNNotificationAttachment = objc.getClass("UNNotificationAttachment") orelse return error.ClassNotFound;
+        const NSString = objc.getClass("NSString") orelse return error.ClassNotFound;
+        const NSNumber = objc.getClass("NSNumber") orelse return error.ClassNotFound;
+        const NSDictionary = objc.getClass("NSDictionary") orelse return error.ClassNotFound;
+
+        // Create attachment identifier
+        var id_buf: [64:0]u8 = undefined;
+        const id_z = try std.fmt.bufPrintZ(&id_buf, "{s}", .{identifier});
+        const identifierStr = NSString.msgSend(objc.Object, "stringWithUTF8String:", .{id_z.ptr});
+
+        // Create options dictionary with thumbnail visibility enabled
+        // UNNotificationAttachmentOptionsThumbnailHiddenKey = NO (false) to show thumbnail
+        const thumbnailKey = NSString.msgSend(objc.Object, "stringWithUTF8String:", .{"UNNotificationAttachmentOptionsThumbnailHiddenKey"});
+        const falseNumber = NSNumber.msgSend(objc.Object, "numberWithBool:", .{@as(u8, 0)});
+
+        const options = NSDictionary.msgSend(
+            objc.Object,
+            "dictionaryWithObject:forKey:",
+            .{ falseNumber.value, thumbnailKey.value },
+        );
+
+        // Create attachment with identifier, URL, options, and error (out parameter)
+        // Signature: +attachmentWithIdentifier:URL:options:error:
+        var error_ptr: ?*anyopaque = null;
+        const attachment = UNNotificationAttachment.msgSend(
+            objc.Object,
+            "attachmentWithIdentifier:URL:options:error:",
+            .{ identifierStr.value, fileURL.value, options.value, &error_ptr },
+        );
+
+        // Check if attachment creation failed
+        if (error_ptr != null) {
+            const error_obj = objc.Object{ .value = @ptrCast(@alignCast(error_ptr.?)) };
+            const errorDesc = error_obj.msgSend(objc.Object, "localizedDescription", .{});
+            const errorCStr = errorDesc.msgSend([*:0]const u8, "UTF8String", .{});
+            std.debug.print("Attachment creation error: {s}\n", .{errorCStr});
+            return error.AttachmentCreationFailed;
+        }
+
+        if (attachment.value == null) {
+            return error.AttachmentCreationFailed;
+        }
+
+        // Create NSArray with single attachment
+        const NSArray = objc.getClass("NSArray") orelse return error.ClassNotFound;
+        const attachmentsArray = NSArray.msgSend(objc.Object, "arrayWithObject:", .{attachment.value});
+
+        // Set attachments on content
+        content.msgSend(void, "setAttachments:", .{attachmentsArray.value});
     }
 
 

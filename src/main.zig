@@ -67,12 +67,22 @@ pub fn main() !void {
         if (config.app_name) |a| notif.app_name = a;
         if (config.replace_id) |r| notif.replace_id = r;
         if (config.icon) |i| {
-            // Try to parse as builtin icon first, otherwise treat as file path
+            // Try to parse as builtin icon first
             if (notification.BuiltinIcon.fromString(i)) |builtin| {
                 notif.icon = .{ .builtin = builtin };
             } else |_| {
-                const icon_path = try allocator.dupe(u8, i);
-                notif.icon = .{ .file_path = icon_path };
+                // Check if it's a URL (http://, https://, or file://)
+                if (std.mem.startsWith(u8, i, "http://") or
+                    std.mem.startsWith(u8, i, "https://") or
+                    std.mem.startsWith(u8, i, "data:") or
+                    std.mem.startsWith(u8, i, "file://")) {
+                    const url = try allocator.dupe(u8, i);
+                    notif.icon = .{ .url = url };
+                } else {
+                    // Treat as file path
+                    const icon_path = try allocator.dupe(u8, i);
+                    notif.icon = .{ .file_path = icon_path };
+                }
             }
         }
 
@@ -104,12 +114,22 @@ pub fn main() !void {
     if (config.app_name) |a| notif.app_name = a;
     if (config.replace_id) |r| notif.replace_id = r;
     if (config.icon) |i| {
-        // Try to parse as builtin icon first, otherwise treat as file path
+        // Try to parse as builtin icon first
         if (notification.BuiltinIcon.fromString(i)) |builtin| {
             notif.icon = .{ .builtin = builtin };
         } else |_| {
-            const icon_path = try allocator.dupe(u8, i);
-            notif.icon = .{ .file_path = icon_path };
+            // Check if it's a URL (http://, https://, or file://)
+            if (std.mem.startsWith(u8, i, "http://") or
+                std.mem.startsWith(u8, i, "https://") or
+                std.mem.startsWith(u8, i, "data:") or
+                std.mem.startsWith(u8, i, "file://")) {
+                const url = try allocator.dupe(u8, i);
+                notif.icon = .{ .url = url };
+            } else {
+                // Treat as file path
+                const icon_path = try allocator.dupe(u8, i);
+                notif.icon = .{ .file_path = icon_path };
+            }
         }
     }
 

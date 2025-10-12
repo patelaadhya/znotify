@@ -9,7 +9,7 @@ This document tracks the implementation status and planned features for all plat
 | Basic notification (title + message) | ✅ | ✅ | ✅ |
 | COM/Framework initialization | ✅ | ✅ | ✅ |
 | AppUserModelID / shortcut creation | ✅ | N/A | N/A |
-| Icon support | ❌ | ✅ | ❌ |
+| Icon support | ❌ | ✅ | ✅ |
 | Urgency levels | ✅ | ✅ | ❌ |
 | Timeout/duration | ⚠️ Hardcoded | ✅ | ❌ |
 | Notification updates (replaces_id) | ❌ | ✅ | ❌ |
@@ -226,14 +226,18 @@ None - Phase 3 complete!
   - 5 comprehensive tests (init, send, version detection, urgency, timeout)
   - Solves UNUserNotificationCenter testing challenge (requires bundle identifier)
 
+#### ✅ Completed (Phase 2 - Features)
+- [x] **Icon Support** (P1)
+  - Local file paths via UNNotificationAttachment (privacy-focused, no file copying)
+  - Builtin icons via SF Symbols (info, warning, error, question, success)
+  - SF Symbols converted to PNG in /tmp (temporary, system-managed cleanup)
+  - Graceful error handling for missing/invalid files
+  - Full test coverage with multiple icon formats
+
 #### 🚧 In Progress / Needs Work
-None - Phase 1 complete, ready for Phase 2 features.
+None - Ready for additional Phase 2 features.
 
 #### 📋 TODO (Phase 2 - Features)
-- [ ] **Icon Support** (P1)
-  - Use app icon automatically
-  - Custom icon via UNNotificationAttachment
-  - Support local file paths
 
 - [ ] **Urgency/Priority Levels** (P1)
   - Map to UNNotificationInterruptionLevel
@@ -285,6 +289,7 @@ None - Phase 1 complete, ready for Phase 2 features.
 - **Testing Challenge**: Tests must run from within app bundle to access UNUserNotificationCenter (solved via build.zig placing test executable in ZNotify.app/Contents/MacOS/)
 - **Version Detection**: Handles Apple's versioning scheme change from 10.x to 11, 12, 13... 26 (macOS Tahoe)
 - **String Handling**: Null-terminated string copies required for NSString stringWithUTF8String: (notif.title/message are not null-terminated)
+- **Icon Attachments**: UNNotificationAttachment with file:// URLs for local paths. Builtin icons rendered from SF Symbols. Supported formats: PNG, JPEG, GIF. File validation performed before attachment creation. Gracefully degrades on errors (notification still sent without icon).
 
 ---
 
@@ -499,4 +504,4 @@ When implementing backend features:
 
 ---
 
-Last Updated: 2025-10-08
+Last Updated: 2025-10-11 (Icon support completed for macOS)
