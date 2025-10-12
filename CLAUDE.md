@@ -293,13 +293,17 @@ GitHub Actions workflow (`.github/workflows/test.yml`) runs:
   - Unique notification identifiers
   - Automatic API selection based on OS version
   - Bundle-context testing (tests run from within ZNotify.app/Contents/MacOS/)
+  - Icon support (local file paths and builtin SF Symbols)
+    - File path icons: Direct file usage (no copying, privacy-focused)
+    - Builtin icons: SF Symbols (info, warning, error, question, success)
+    - SF Symbols converted to PNG in /tmp (temporary, system-managed cleanup)
+    - UNNotificationAttachment with thumbnail visibility control
 - **Testing Infrastructure**:
   - Custom build.zig logic runs tests from within app bundle
   - Solves UNUserNotificationCenter requirement for valid bundle identifier
   - Industry best practice for testing framework APIs
-  - 5 comprehensive tests: init, send, version detection, urgency, timeout
+  - Comprehensive test coverage including icon support tests
 - **TODO (Phase 2)**:
-  - Custom icon support
   - Action buttons
   - Sound configuration
   - Urgency level mapping

@@ -46,9 +46,9 @@ Currently implemented:
   - Native notifications with title and message
   - Requires macOS 10.14+ (Mojave or later)
   - Notification Center integration
+  - Icon support (local file paths and builtin SF Symbols)
 
 Coming soon:
-- Icon support (macOS)
 - Urgency levels (macOS)
 - Timeout control (macOS)
 - Action buttons (macOS, Windows)
