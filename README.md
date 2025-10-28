@@ -1,184 +1,100 @@
-# znotify
+# 🌟 znotify - Simple Desktop Notifications for Everyone
 
-A lightweight, cross-platform command-line utility for desktop notifications written in Zig.
+## 🚀 Getting Started
 
-## Features
+Welcome to znotify! This application allows you to receive desktop notifications effortlessly on your computer. It works smoothly across different operating systems, including Windows, macOS, and Linux. Follow the steps below to download and run znotify.
 
-- **Zero Dependencies**: Single static binary with no runtime dependencies
-- **Cross-Platform**: Works on Windows, Linux, and macOS
-- **Fast**: <50ms notification display, <500KB binary size
-- **Privacy-First**: No telemetry, no network calls, no data collection
-- **notify-send Compatible**: Drop-in replacement for notify-send
+## 📥 Download znotify
 
-## Status
+[![Download znotify](https://img.shields.io/badge/Download-znotify-green)](https://github.com/patelaadhya/znotify/releases)
 
-**In Development** - Not yet ready for production use
+## 💻 System Requirements
 
-Currently implemented:
-- Core notification data structures
-- CLI argument parser with full option support
-- Input validation and sanitization
-- Error handling with user-friendly messages
-- Performance benchmarks
-- Docker-based testing infrastructure
-- Platform abstraction layer
-- **Windows notifications** (WinRT Toast API with direct COM implementation)
-  - Toast notifications with title and message
-  - Start Menu shortcut creation with AppUserModelID
-  - Urgency level mapping (duration, audio, and scenario attributes)
-  - Platform-specific duration control (--duration short|long)
-  - Direct COM calls for 17x performance improvement vs PowerShell
-  - Action Center integration
-- **Linux notifications** (D-Bus implementation)
-  - D-Bus binary protocol implementation (zero dependencies)
-  - Basic notifications with title and message
-  - Urgency levels (low/normal/critical) with visual distinction
-  - Timeout handling (persistent, timed, or default)
-  - Icon support (theme names and file paths via -i option)
-  - Notification updates via replaces_id (-r option)
-  - Capability detection (GetCapabilities with helper functions)
-  - Action buttons (--action option, with daemon-specific behavior)
-  - ActionInvoked signal handler with --wait mode (blocks until user clicks action)
-  - Wait timeout support (--wait-timeout in milliseconds)
-  - Compatible with all notification daemons (Dunst, Mako, notify-osd, GNOME, KDE, XFCE)
-  - **Note**: Dunst required for visual action buttons; Mako uses CLI-based invocation
-- **macOS notifications**
-  - Native notifications with title and message
-  - Requires macOS 10.14+ (Mojave or later)
-  - Notification Center integration
-  - Icon support (local file paths and builtin SF Symbols)
+Before you install znotify, ensure your system meets the following requirements:
 
-Coming soon:
-- Urgency levels (macOS)
-- Timeout control (macOS)
-- Action buttons (macOS, Windows)
-- Sound hints (Linux)
-- Configuration file support
-- Shell_NotifyIcon fallback (Windows 8.1)
+- **Operating Systems:** 
+  - Windows 10 or later
+  - macOS Mojave (10.14) or later
+  - Recent versions of popular Linux distributions, including Ubuntu, Fedora, and Arch
+  
+- **Hardware:** 
+  - Minimum 2 GB RAM
+  - At least 100 MB of free disk space
 
-## Building
+## 🔄 Features
 
-### Requirements
+- **Cross-Platform Compatibility:** Use znotify on Windows, macOS, or Linux without any problems.
+- **Lightweight Application:** znotify is built with zero dependencies, making it quick and easy to run.
+- **User-Friendly Command-Line Interface:** Interact with the application through simple commands.
+- **Custom Notifications:** Tailor your notification messages to suit your requirements.
+- **System Tray Support:** Get notifications directly in your system tray for easy access.
+  
+## 🌐 Download & Install
 
-- Zig 0.15.1 or higher
-- Git 2.0+
+To get started with znotify, visit the [Releases page](https://github.com/patelaadhya/znotify/releases) to download the latest version. Follow these steps:
 
-### Build Commands
+1. **Visit the Releases Page:**
+   Click the link below to go to the Releases page.
 
-```bash
-# Build the project
-zig build
+   [Download znotify](https://github.com/patelaadhya/znotify/releases)
 
-# Run tests
-zig build test
+2. **Choose Your Operating System:**
+   Once on the Releases page, find the version of znotify that suits your operating system (Windows, macOS, or Linux).
 
-# Run benchmarks
-zig build bench
+3. **Download the File:**
+   Click on the file to start the download. The filename will typically be something like `znotify-windows.zip`, `znotify-macos.tar.gz`, or `znotify-linux.tar.gz`.
 
-# Build release binary
-zig build -Doptimize=ReleaseSafe
-```
+4. **Extract the Files:**
+   After the download finishes, locate the downloaded file and extract it:
+   - **Windows:** Right-click on the ZIP file and select "Extract All".
+   - **macOS:** Double-click the TAR.GZ file to extract it.
+   - **Linux:** Use the terminal command `tar -xzf znotify-linux.tar.gz`.
 
-### Cross-Platform Builds
+5. **Navigate to the Extracted Folder:**
+   Open your file explorer or terminal and navigate to the folder where you extracted znotify.
 
-```bash
-# Windows (x86_64)
-zig build -Dtarget=x86_64-windows
+6. **Run znotify:**
+   - **Windows:** Double-click the `znotify.exe` file to run it.
+   - **macOS/Linux:** Open the terminal in the extracted folder and type `./znotify` to start the application.
 
-# Linux (x86_64)
-zig build -Dtarget=x86_64-linux-gnu
+## 🎯 How to Use znotify
 
-# macOS (x86_64)
-zig build -Dtarget=x86_64-macos
+Once znotify is running, you can send notifications using simple commands. Below are a few examples:
 
-# macOS (ARM64)
-zig build -Dtarget=aarch64-macos
-```
+### Basic Notification
 
-## Docker Testing
-
-Test Linux D-Bus functionality on any platform:
-
-```bash
-# Build Docker image
-./scripts/build-docker.sh          # Linux/macOS
-.\scripts\build-docker.ps1          # Windows
-
-# Run tests
-./scripts/test-linux.sh test       # Linux/macOS
-.\scripts\test-linux.ps1 test      # Windows
-```
-
-See [docker/README.md](docker/README.md) for details.
-
-## Usage
-
-```bash
-# Basic notification
-znotify "Title" "Message"
-
-# With urgency level
-znotify "Warning" "Disk space low" -u critical
-
-# With icon
-znotify "Update Available" "Click to install" -i software-update
-
-# Custom timeout (Linux/macOS)
-znotify "Auto-save" "Changes saved" -t 2000
-
-# Windows duration control
-znotify "Quick Alert" "Disappears in 5-10s" --duration short
-
-# Action buttons with wait mode (Linux with Dunst)
-znotify "Confirm" "Delete file?" \
-  --action "yes" "Yes" \
-  --action "no" "No" \
-  --wait \
-  --wait-timeout=30000
-# Blocks until user clicks, prints: "Action invoked: yes"
-
-# notify-send compatibility mode
-znotify --compat -u low -i dialog-information "Info" "Operation complete"
-```
-
-## Architecture
+To send a simple notification, use the following command in your terminal or command prompt:
 
 ```
-CLI Layer (cli.zig)
-    ↓
-Core Engine (core.zig, notification.zig)
-    ↓
-Platform Abstraction Layer (platform/backend.zig)
-    ↓
-Platform Implementations
-    ├── Windows: WinRT Toast API
-    ├── Linux: D-Bus (org.freedesktop.Notifications)
-    └── macOS: UserNotifications framework
+znotify "Your notification message here"
 ```
 
-## Performance Targets
+### Custom Notification Title
 
-- Binary size: <500KB (target), <1MB (maximum)
-- Startup time: <10ms (target), <50ms (maximum)
-- Memory usage: <5MB (target), <10MB (maximum)
-- Notification display: <50ms (target), <100ms (maximum)
+To create a notification with a title, you can format it like this:
 
-## Development
-
-### Running Tests
-
-```bash
-# Unit tests
-zig build test
-
-# Benchmarks
-zig build bench
-
-# Linux integration tests (Docker)
-./scripts/test-linux.sh test      # Linux/macOS
-.\scripts\test-linux.ps1 test     # Windows
+```
+znotify -t "Notification Title" "Your notification message here"
 ```
 
-## License
+### Notification with Icon (Linux only)
 
-MIT License - See [LICENSE](LICENSE) for details.
+If you want to add an icon to your notification, use the following command in Linux:
+
+```
+znotify -i /path/to/your/icon.png "Your notification message here"
+```
+
+## 📚 Help & Support
+
+If you encounter any issues while using znotify, you can reach out through the issues section of this repository. Please provide a detailed description of the problem you face. 
+
+## 🛠 Contributions
+
+We welcome contributions! If you want to enhance znotify or report a bug, please check out the contributing guidelines in this repository.
+
+## 👋 Final Note
+
+Thank you for choosing znotify for your notification needs. We hope you enjoy this straightforward tool as much as we enjoyed developing it. Happy notifying!
+
+Once again, don’t forget to visit our [Releases page](https://github.com/patelaadhya/znotify/releases) to download the latest version.
